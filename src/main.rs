@@ -1,6 +1,8 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
+use futures_util::{SinkExt, StreamExt};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const PAYMENTS: &str = "Платежи";
 const OLIVIA: &str = "ОЛИВИЯ МАКСАКОВА";
@@ -21,6 +23,10 @@ pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
     let element = driver.find(by_xpath).await?;
     element.click().await?;
     Ok(())
+}
+
+pub fn add_magyar(a: u32, b: u32) -> u32 {
+    a + b
 }
 
 pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<()> {
@@ -99,6 +105,25 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
     Ok(())
 }
 
+
+async fn connect() -> Result<()> {
+    let (mut websocket_stream, _) = connect_async("ws://127.0.0.1:3000/ws")
+        .await
+        .context("Не удалось подключиться к WebSocket")?;
+
+    websocket_stream
+        .send(Message::text("Привет, сервер!"))
+        .await
+        .context("Не удалось отправить сообщение")?;
+
+    if let Some(Ok(Message::Text(reply))) = websocket_stream.next().await {
+        println!("Ответ от сервера: {}", reply);
+    }
+
+    websocket_stream.close(None).await.ok();
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let test = [PAYMENTS, OWN];
@@ -136,4 +161,22 @@ async fn main() -> Result<()> {
     driver.quit().await?;
 
     Ok(())
+}
+
+
+#[cfg(test)]
+
+mod tests {
+
+    //use crate::add_magyar;
+    use super::*;
+    #[test]
+    fn test_add(){
+        assert_eq!(3, add_magyar(1, 2));
+    }
+
+    #[tokio::test]
+    async fn test_websocket_async() {
+        assert!(connect().await.is_ok());
+    }
 }
