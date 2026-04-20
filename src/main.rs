@@ -1,6 +1,20 @@
 use anyhow::Result;
 use thirtyfour::prelude::*;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
+
+const PAYMENTS: &str = "Платежи";
+const OLIVIA: &str = "ОЛИВИЯ МАКСАКОВА";
+const BABEFA: &str = "ЖК Бабефа";
+const OKLAND: &str = "ОКЛАНД РЫБАЦКАЯ";
+const RED: &str = "РЭД Грузинская";
+const TETRIS: &str = "ЖК Тетрис на Керченской";
+const SCANDINAVIA: &str = "Скандинавия - Моздокская";
+const KUIB: &str = "Куйбышева";
+const POLZ: &str = "Ползунова";
+const ZVEZD: &str = "Звездная";
+const SKY: &str = "СКАЙ ИГАРСКАЯ";
+
+const OWN: &str = "OWN";
 
 pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
     let by_xpath = By::XPath("//*[text()='Коллабы']");
@@ -17,14 +31,12 @@ pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<
     Ok(())
 }
 
-async fn wait() -> Result<()> {
+async fn wait() {
     sleep(Duration::from_secs(30)).await;
-    Ok(())
 }
 
-async fn wait_in_sec(delay: u64) -> Result<()> {
+async fn wait_in_sec(delay: u64) {
     sleep(Duration::from_secs(delay)).await;
-    Ok(())
 }
 
 async fn init_chrome_driver() -> Result<WebDriver> {
@@ -35,8 +47,74 @@ async fn init_chrome_driver() -> Result<WebDriver> {
     Ok(driver)
 }
 
+async fn scroll_down_current_collab() -> Result<()> {
+    Ok(())
+}
+
+async fn process_item_with_delay(delay: u64, text_collab: &str, driver: &WebDriver) -> Result<()> {
+    click_collab_simple_text(&driver, text_collab).await?;
+    ///works!
+    scroll_chat_to_bottom(driver).await?;
+    wait_in_sec(15).await;
+    Ok(())
+}
+
+async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
+    println!("=== Начинаем прокрутку чата ===");
+
+    let mut iteration = 0;
+    loop {
+        iteration += 1;
+        let button_selector = By::Css(
+            ".bx-im-dialog-chat__float-buttons_button, .bx-im-dialog-chat__float-button_icon",
+        );
+        match driver
+            .query(button_selector)
+            .wait(Duration::from_secs(2), Duration::from_millis(300))
+            .and_clickable()
+            .first()
+            .await
+        {
+            Ok(button) => {
+                println!("Iteration:: {}, click button!", iteration);
+                if let Err(e) = button.click().await {
+                    println!("CLICL FAILED - {}. TRY JS", e);
+                    driver
+                        .execute("arguments[0].click();", vec![button.to_json()?])
+                        .await?;
+                }
+                sleep(Duration::from_millis(1500)).await;
+            }
+            Err(_) => {
+                println!("Button not found! Stop!");
+                break;
+            }
+        }
+        if iteration >= 20 {
+            println!("REACHED LIMIT ITERATIONS!!!");
+            break;
+        }
+    }
+    println!("SCROLL COMPLETE!");
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let test = [PAYMENTS, OWN];
+    let iterate = [
+        PAYMENTS,
+        TETRIS,
+        KUIB,
+        OLIVIA,
+        BABEFA,
+        OKLAND,
+        RED,
+        SCANDINAVIA,
+        POLZ,
+        ZVEZD,
+        SKY,
+    ];
     const BASE_URL: &str = "https://relits.bitrix24.ru";
     let user_id = 1;
     let driver = init_chrome_driver().await?;
@@ -45,13 +123,15 @@ async fn main() -> Result<()> {
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
-    wait().await?;              
+    wait().await;
     click_collab_simple(&driver).await?;
-    wait_in_sec(15).await?;   
+    wait_in_sec(15).await;
 
-    click_collab_simple_text(&driver, "Платежи").await?;  ///works!
-    wait_in_sec(15).await?;
-
+    for item in test.iter() {
+        if let Err(e) = process_item_with_delay(15, item, &driver).await {
+            eprintln!("Ошибка при клике по '{}': {}", item, e);
+        }
+    }
 
     driver.quit().await?;
 
