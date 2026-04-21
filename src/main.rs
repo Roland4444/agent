@@ -3,7 +3,7 @@ use std::fs;
 use anyhow::{Result, Context};
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
-use futures_util::{SinkExt, StreamExt};
+//use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const PAYMENTS: &str = "Платежи";
