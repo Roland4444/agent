@@ -72,15 +72,12 @@ async fn init_chrome_driver() -> Result<WebDriver> {
     let mut caps = DesiredCapabilities::chrome();
     caps.add_arg("--no-sandbox")?;
     caps.add_arg("--disable-dev-shm-usage")?;
-//    caps.add_arg("--headless")?;
-//    caps.add_arg("--window-size=1920,1080")?;
+    caps.add_arg("--headless")?;
+    caps.add_arg("--window-size=1920,1080")?;
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
     Ok(driver)
 }
 
-async fn scroll_down_current_collab() -> Result<()> {
-    Ok(())
-}
 
 async fn process_item_with_delay(delay: u64, text_collab: &str, driver: &WebDriver) -> Result<()> {
     click_collab_simple_text(&driver, text_collab).await?;
@@ -131,27 +128,6 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 }
 
 
-async fn connect() -> Result<()> {
-    let (mut websocket_stream, _) = connect_async("ws://127.0.0.1:3000/ws")
-        .await
-        .context("Не удалось подключиться к WebSocket")?;
-
-    websocket_stream
-        .send(Message::text("Привет, сервер!"))
-        .await
-        .context("Не удалось отправить сообщение")?;
-
-    if let Some(Ok(Message::Text(reply))) = websocket_stream.next().await {
-        println!("Ответ от сервера: {}", reply);
-    }
-
-    websocket_stream.close(None).await.ok();
-    Ok(())
-}
-
-
-
-
 async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
     let login_field = driver
         .query(By::Css("input.b24net-text-input__field[type='text']"))
@@ -174,12 +150,11 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         password_field.send_keys(pass).await?;
         password_field.send_keys(Key::Enter).await?;
     }
-
-
-
-
     Ok(())
 }
+
+const BASE_URL: &str = "https://relits.bitrix24.ru";
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -196,6 +171,7 @@ async fn main() -> Result<()> {
         POLZ,
         ZVEZD,
         SKY,
+        OWN
     ];
     const BASE_URL: &str = "https://relits.bitrix24.ru";
     let user_id = 1;
@@ -237,10 +213,6 @@ mod tests {
         assert_eq!(3, add_magyar(1, 2));
     }
 
-    #[tokio::test]
-    async fn test_websocket_async() {
-        assert!(connect().await.is_ok());
-    }
 
     #[test]
     fn test_read_login(){
