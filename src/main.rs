@@ -1,10 +1,13 @@
 use std::fs;
+//python3 -m http.server 8000
 
 use anyhow::{Result, Context};
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
+
+use chrono::Local;
+use std::path::Path;
 //use futures_util::{SinkExt, StreamExt};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const PAYMENTS: &str = "Платежи";
 const OLIVIA: &str = "ОЛИВИЯ МАКСАКОВА";
@@ -17,6 +20,8 @@ const KUIB: &str = "Куйбышева";
 const POLZ: &str = "Ползунова";
 const ZVEZD: &str = "Звездная";
 const SKY: &str = "СКАЙ ИГАРСКАЯ";
+
+
 
 const OWN: &str = "OWN";
 
@@ -39,6 +44,15 @@ fn read_from_file(filename: &str) -> Option<String> {
         Ok(str) => Some(str),
         Err(_ ) => None,
     }
+}
+
+
+async fn take_screenshot(driver: &WebDriver, base_name: &str) -> Result<String> {
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let filename = format!("{}_{}.png", base_name, timestamp);
+    driver.screenshot(Path::new(&filename)).await?;
+    println!("Скриншот сохранён: {}", filename);
+    Ok(filename)
 }
 
 pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
@@ -131,23 +145,25 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 }
 
 
-async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
+async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
+    sleep(Duration::from_secs(3)).await;
+
+    take_screenshot(driver, "relits_login").await?;
+
     let login_field = driver
         .query(By::Css("input.b24net-text-input__field[type='text']"))
         .wait(Duration::from_secs(5), Duration::from_millis(500))
         .first()
         .await;
-    
+    take_screenshot(driver, "relits_login___").await?;
 
     if let Ok(field) = login_field {
         println!("ENTERING...");
         field.send_keys(username).await?;
-
         field.send_keys(Key::Enter).await?;
 
         sleep(Duration::from_secs(15)).await;
-
-
+        take_screenshot(driver, "relits_pass___").await?;
 
         let password_field = driver
             .query(By::Css("input.b24net-text-input__field[type='password']"))
@@ -160,6 +176,44 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
     }
     Ok(())
 }
+
+
+
+// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
+//     sleep(Duration::from_secs(3)).await;
+
+//     take_screenshot(&driver, "relits_login").await?;
+
+//     let login_field = driver
+//         .query(By::Css("input.b24net-text-input__field[type='text']"))
+//         .wait(Duration::from_secs(5), Duration::from_millis(500))
+//         .first()
+//         .await;
+//         take_screenshot(&driver, "relits_login___").await?;
+
+
+//     if let Ok(field) = login_field {
+//         println!("ENTERING...");
+//         field.send_keys(username).await?;
+
+//         field.send_keys(Key::Enter).await?;
+
+//         sleep(Duration::from_secs(15)).await;
+
+//         take_screenshot(&driver, "relits_pass___").await?;
+
+
+//         let password_field = driver
+//             .query(By::Css("input.b24net-text-input__field[type='password']"))
+//             .wait(Duration::from_secs(2), Duration::from_millis(500))
+//             .first()
+//             .await?;
+
+//         password_field.send_keys(pass).await?;
+//         password_field.send_keys(Key::Enter).await?;
+//     }
+//     Ok(())
+// }
 
 const BASE_URL: &str = "https://relits.bitrix24.ru";
 
