@@ -1,3 +1,5 @@
+use std::fs;
+
 use anyhow::{Result, Context};
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
@@ -17,6 +19,27 @@ const ZVEZD: &str = "Звездная";
 const SKY: &str = "СКАЙ ИГАРСКАЯ";
 
 const OWN: &str = "OWN";
+
+const PASS_FIELNAME: &str = "pass";
+const LOGIN_FILENAME: &str = "login";
+
+
+
+fn pass() -> Option<String> {
+    read_from_file(PASS_FIELNAME)
+}
+
+fn login() -> Option<String> {
+    read_from_file(LOGIN_FILENAME)
+}
+
+fn read_from_file(filename: &str) -> Option<String> {
+    let g  = fs::read_to_string(filename);
+    match g {
+        Ok(str) => Some(str),
+        Err(_ ) => None,
+    }
+}
 
 pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
     let by_xpath = By::XPath("//*[text()='Коллабы']");
@@ -49,6 +72,8 @@ async fn init_chrome_driver() -> Result<WebDriver> {
     let mut caps = DesiredCapabilities::chrome();
     caps.add_arg("--no-sandbox")?;
     caps.add_arg("--disable-dev-shm-usage")?;
+//    caps.add_arg("--headless")?;
+//    caps.add_arg("--window-size=1920,1080")?;
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
     Ok(driver)
 }
@@ -124,6 +149,38 @@ async fn connect() -> Result<()> {
     Ok(())
 }
 
+
+
+
+async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
+    let login_field = driver
+        .query(By::Css("input.b24net-text-input__field[type='text']"))
+        .wait(Duration::from_secs(5), Duration::from_millis(500))
+        .first()
+        .await;
+    
+
+    if let Ok(field) = login_field {
+        println!("ENTERING...");
+        field.send_keys(username).await?;
+
+        field.send_keys(Key::Enter).await?;
+        let password_field = driver
+            .query(By::Css("input.b24net-text-input__field[type='password']"))
+            .wait(Duration::from_secs(2), Duration::from_millis(500))
+            .first()
+            .await?;
+
+        password_field.send_keys(pass).await?;
+        password_field.send_keys(Key::Enter).await?;
+    }
+
+
+
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let test = [PAYMENTS, OWN];
@@ -148,11 +205,16 @@ async fn main() -> Result<()> {
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
+    login_cad(&driver, 
+        login().expect("SHIT HAPPENS").as_str(), 
+        pass().expect("SHIT HAPPENS").as_str())
+        .await?;
+    
     wait().await;
     click_collab_simple(&driver).await?;
     wait_in_sec(15).await;
 
-    for item in test.iter() {
+    for item in iterate.iter() {
         if let Err(e) = process_item_with_delay(15, item, &driver).await {
             eprintln!("Ошибка при клике по '{}': {}", item, e);
         }
@@ -178,5 +240,15 @@ mod tests {
     #[tokio::test]
     async fn test_websocket_async() {
         assert!(connect().await.is_ok());
+    }
+
+    #[test]
+    fn test_read_login(){
+        let login_file = "login.txt";
+        let login = "rpastushkovb@relits.ru";
+        let _ =  fs::write(login_file, login);
+        let readed = read_from_file(login_file).expect("not found");
+        println!("READED:: {}", readed);
+        assert_eq!(login.to_string(), read_from_file(login_file).expect("PANIC"));
     }
 }
