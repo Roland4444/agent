@@ -76,7 +76,7 @@ async fn init_chrome_driver() -> Result<WebDriver> {
     caps.add_arg("--disable-gpu")?;                             //
     caps.add_arg("--disable-software-rasterizer")?;             //    
     caps.add_arg("--disable-dev-shm-usage")?;                   //
-    caps.add_arg("--remote-debugging-port=9222")?;              //
+  //  caps.add_arg("--remote-debugging-port=9222")?;              //
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
     Ok(driver)
 }
@@ -131,74 +131,35 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 }
 
 
-async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
+async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
     let login_field = driver
         .query(By::Css("input.b24net-text-input__field[type='text']"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .and_clickable()
+        .wait(Duration::from_secs(5), Duration::from_millis(500))
         .first()
-        .await
-        .context("Поле логина не появилось")?;
-    login_field.send_keys(username).await?;
-    login_field.send_keys(Key::Enter).await?;
-
-    driver
-        .query(By::Css("input.b24net-text-input__field[type='text']"))
-        .wait(Duration::from_secs(2), Duration::from_millis(200))
-        .not_exists()
-        .await?;
-
-    let password_field = driver
-        .query(By::Css("input.b24net-text-input__field[type='password']"))
-        .wait(Duration::from_secs(15), Duration::from_millis(500))
-        .and_clickable()
-        .first()
-        .await
-        .context("Поле пароля не появилось")?;
-    password_field.send_keys(pass).await?;
-    password_field.send_keys(Key::Enter).await?;
-
-    driver
-        .query(By::XPath("//*[text()='Коллабы']"))
-        .wait(Duration::from_secs(20), Duration::from_millis(500))
-        .first()
-        .await
-        .context("Не удалось войти: элемент 'Коллабы' не появился")?;
-
-    Ok(())
-}
-
-
-
-// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
-//     let login_field = driver
-//         .query(By::Css("input.b24net-text-input__field[type='text']"))
-//         .wait(Duration::from_secs(5), Duration::from_millis(500))
-//         .first()
-//         .await;
+        .await;
     
 
-//     if let Ok(field) = login_field {
-//         println!("ENTERING...");
-//         field.send_keys(username).await?;
+    if let Ok(field) = login_field {
+        println!("ENTERING...");
+        field.send_keys(username).await?;
 
-//         field.send_keys(Key::Enter).await?;
+        field.send_keys(Key::Enter).await?;
 
-//         sleep(Duration::from_secs(15)).await;
+        sleep(Duration::from_secs(15)).await;
 
 
 
-//         let password_field = driver
-//             .query(By::Css("input.b24net-text-input__field[type='password']"))
-//             .wait(Duration::from_secs(2), Duration::from_millis(500))
-//             .first()
-//             .await?;
+        let password_field = driver
+            .query(By::Css("input.b24net-text-input__field[type='password']"))
+            .wait(Duration::from_secs(2), Duration::from_millis(500))
+            .first()
+            .await?;
 
-//         password_field.send_keys(pass).await?;
-//         password_field.send_keys(Key::Enter).await?;
-//     }
-//     Ok(())
-// }
+        password_field.send_keys(pass).await?;
+        password_field.send_keys(Key::Enter).await?;
+    }
+    Ok(())
+}
 
 const BASE_URL: &str = "https://relits.bitrix24.ru";
 
