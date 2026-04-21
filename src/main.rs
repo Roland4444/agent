@@ -85,7 +85,11 @@ async fn wait_in_sec(delay: u64) {
 async fn init_chrome_driver() -> Result<WebDriver> {
     let mut caps = DesiredCapabilities::chrome();
     caps.add_arg("--no-sandbox")?;
-    caps.add_arg("--headless")?;                                //
+
+    caps.add_arg("--headless=new")?;  // вместо --headless
+    caps.add_arg("--disable-blink-features=AutomationControlled")?;
+    caps.add_arg("--disable-features=IsolateOrigins,site-per-process")?;
+ //   caps.add_arg("--headless")?;                                //
     caps.add_arg("--window-size=1920,1080")?;
     caps.add_arg("--disable-gpu")?;                             //
     caps.add_arg("--disable-software-rasterizer")?;             //    
@@ -154,7 +158,7 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .context("Поле логина не появилось")?;
     login_field.send_keys(username).await?;
 
-    sleep(Duration::from_secs(1)).await;
+    take_screenshot(driver, "after_login_input").await?; // <-- добавлено
 
     let continue_btn = driver
         .query(By::Css(".b24net-login-enter-form__continue-btn"))
@@ -181,7 +185,6 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .context("Кнопка 'Продолжить' после пароля не найдена")?;
     driver.execute("arguments[0].click();", vec![submit_btn.to_json()?]).await?;
 
-    // Всё. Никаких коллабов.
     Ok(())
 }
 // async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
