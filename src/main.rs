@@ -147,8 +147,8 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
     println!("SCROLL COMPLETE!");
     Ok(())
 }
-
 async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
+    // Поле логина
     let login_field = driver
         .query(By::Css("input.b24net-text-input__field[type='text']"))
         .wait(Duration::from_secs(10), Duration::from_millis(500))
@@ -157,22 +157,25 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .await
         .context("Поле логина не появилось")?;
 
-    // Ввод логина через JavaScript
-    driver.execute(&format!("arguments[0].value = '{}';", username), vec![login_field.to_json()?]).await?;
+    // Вводим логин обычным способом
+    login_field.send_keys(username).await?;
+
+    // Принудительно отправляем события изменения, чтобы форма активировалась
     driver.execute("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", vec![login_field.to_json()?]).await?;
     driver.execute("arguments[0].dispatchEvent(new Event('change', {bubbles: true}));", vec![login_field.to_json()?]).await?;
-    driver.execute("arguments[0].blur();", vec![login_field.to_json()?]).await?;
 
-    sleep(Duration::from_secs(2)).await;
+    // Ждём появления кнопки "Продолжить" (увеличиваем таймаут)
+    let continue_btn = driver
+        .query(By::Css(".b24net-login-enter-form__continue-btn"))
+        .wait(Duration::from_secs(30), Duration::from_millis(500))
+        .first()
+        .await
+        .context("Кнопка 'Продолжить' не появилась после ввода логина")?;
 
-    // Прямой JS-клик по кнопке
-    let result = driver.execute("document.querySelector('.b24net-login-enter-form__continue-btn')?.click();", vec![]).await;
-    if let Err(e) = result {
-        take_screenshot(driver, "error_js_click").await?;
-        anyhow::bail!("Не удалось кликнуть по кнопке: {}", e);
-    }
+    // Кликаем через JavaScript (надёжнее, чем обычный клик)
+    driver.execute("arguments[0].click();", vec![continue_btn.to_json()?]).await?;
 
-    // Поле пароля
+    // Ждём поле пароля
     let password_field = driver
         .query(By::Css("input.b24net-text-input__field[type='password']"))
         .wait(Duration::from_secs(30), Duration::from_millis(500))
@@ -182,10 +185,19 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .context("Поле пароля не появилось")?;
 
     password_field.send_keys(pass).await?;
+    driver.execute("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", vec![password_field.to_json()?]).await?;
 
-    // Клик по второй кнопке
-    driver.execute("document.querySelector('.b24net-password-enter-form__continue-btn')?.click();", vec![]).await?;
+    // Кнопка после пароля
+    let submit_btn = driver
+        .query(By::Css(".b24net-password-enter-form__continue-btn"))
+        .wait(Duration::from_secs(30), Duration::from_millis(500))
+        .first()
+        .await
+        .context("Кнопка 'Продолжить' после пароля не появилась")?;
 
+    driver.execute("arguments[0].click();", vec![submit_btn.to_json()?]).await?;
+
+    // Успешный вход
     Ok(())
 }
 // async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
