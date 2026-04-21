@@ -145,7 +145,6 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 }
 
 
-
 async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
     take_screenshot(driver, "00_before_login").await?;
 
@@ -158,34 +157,64 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .context("Поле логина не появилось")?;
     login_field.send_keys(username).await?;
 
-    let continue_btn = driver
+    // Скриншот перед поиском кнопки
+    take_screenshot(driver, "01_before_continue_btn").await?;
+
+    // Ищем кнопку "Продолжить" с увеличенным таймаутом
+    let continue_btn = match driver
         .query(By::Css(".b24net-login-enter-form__continue-btn"))
-        .wait(Duration::from_secs(5), Duration::from_millis(500))
+        .wait(Duration::from_secs(10), Duration::from_millis(500))
         .and_clickable()
         .first()
         .await
-        .context("Кнопка 'Продолжить' после логина не найдена")?;
+    {
+        Ok(btn) => btn,
+        Err(e) => {
+            take_screenshot(driver, "02_error_no_continue_btn").await?;
+            return Err(anyhow::anyhow!("Кнопка 'Продолжить' после логина не найдена: {}", e));
+        }
+    };
+
+    // Скриншот перед кликом
+    take_screenshot(driver, "03_before_continue_click").await?;
     continue_btn.click().await?;
 
-    let password_field = driver
+    // Скриншот после клика
+    take_screenshot(driver, "04_after_continue_click").await?;
+
+    // Ждём появления поля пароля
+    let password_field = match driver
         .query(By::Css("input.b24net-text-input__field[type='password']"))
         .wait(Duration::from_secs(20), Duration::from_millis(500))
         .and_clickable()
         .first()
         .await
-        .context("Поле пароля не появилось")?;
+    {
+        Ok(field) => field,
+        Err(e) => {
+            take_screenshot(driver, "05_error_no_password_field").await?;
+            return Err(anyhow::anyhow!("Поле пароля не появилось: {}", e));
+        }
+    };
     password_field.send_keys(pass).await?;
 
-    let submit_btn = driver
+    // Кнопка "Продолжить" после пароля
+    let submit_btn = match driver
         .query(By::Css(".b24net-password-enter-form__continue-btn"))
         .wait(Duration::from_secs(5), Duration::from_millis(500))
         .and_clickable()
         .first()
         .await
-        .context("Кнопка 'Продолжить' после пароля не найдена")?;
+    {
+        Ok(btn) => btn,
+        Err(e) => {
+            take_screenshot(driver, "06_error_no_submit_btn").await?;
+            return Err(anyhow::anyhow!("Кнопка 'Продолжить' после пароля не найдена: {}", e));
+        }
+    };
     submit_btn.click().await?;
 
-    take_screenshot(driver, "02_after_password").await?;
+    take_screenshot(driver, "07_login_success").await?;
     Ok(())
 }
 // async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
