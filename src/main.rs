@@ -145,7 +145,6 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 }
 
 async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
-    // Поле логина
     let login_field = driver
         .query(By::Css("input.b24net-text-input__field[type='text']"))
         .wait(Duration::from_secs(10), Duration::from_millis(500))
@@ -155,27 +154,16 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .context("Поле логина не появилось")?;
     login_field.send_keys(username).await?;
 
-    // Ждём, когда кнопка "Продолжить" перестанет быть в состоянии ожидания (спиннер)
-    driver
-        .query(By::Css(".b24net-login-enter-form__continue-btn:not(.b24net-text-btn--call-to-action-waiting)"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .and_clickable()
-        .first()
-        .await
-        .context("Кнопка 'Продолжить' не стала активной")?;
+    sleep(Duration::from_secs(1)).await;
 
-    // Теперь ищем саму кнопку (уже без спиннера)
     let continue_btn = driver
         .query(By::Css(".b24net-login-enter-form__continue-btn"))
+        .wait(Duration::from_secs(10), Duration::from_millis(500))
         .first()
-        .await?;
+        .await
+        .context("Кнопка 'Продолжить' не найдена")?;
+    driver.execute("arguments[0].click();", vec![continue_btn.to_json()?]).await?;
 
-    // Используем JavaScript-клик, чтобы избежать stale element
-    driver
-        .execute("arguments[0].click();", vec![continue_btn.to_json()?])
-        .await?;
-
-    // Ждём появления поля пароля
     let password_field = driver
         .query(By::Css("input.b24net-text-input__field[type='password']"))
         .wait(Duration::from_secs(20), Duration::from_millis(500))
@@ -185,31 +173,15 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .context("Поле пароля не появилось")?;
     password_field.send_keys(pass).await?;
 
-    // Кнопка "Продолжить" после пароля (аналогично)
-    driver
-        .query(By::Css(".b24net-password-enter-form__continue-btn:not(.b24net-text-btn--call-to-action-waiting)"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .and_clickable()
-        .first()
-        .await
-        .context("Кнопка 'Продолжить' после пароля не стала активной")?;
-
     let submit_btn = driver
         .query(By::Css(".b24net-password-enter-form__continue-btn"))
-        .first()
-        .await?;
-    driver
-        .execute("arguments[0].click();", vec![submit_btn.to_json()?])
-        .await?;
-
-    // Ждём успешного входа
-    driver
-        .query(By::XPath("//*[text()='Коллабы']"))
-        .wait(Duration::from_secs(30), Duration::from_millis(500))
+        .wait(Duration::from_secs(10), Duration::from_millis(500))
         .first()
         .await
-        .context("Не удалось войти: элемент 'Коллабы' не появился")?;
+        .context("Кнопка 'Продолжить' после пароля не найдена")?;
+    driver.execute("arguments[0].click();", vec![submit_btn.to_json()?]).await?;
 
+    // Всё. Никаких коллабов.
     Ok(())
 }
 // async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
