@@ -145,63 +145,59 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 }
 
 
-async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
-    sleep(Duration::from_secs(3)).await;
 
-    take_screenshot(driver, "relits_login").await?;
+async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
+    // Скриншот перед вводом логина
+    take_screenshot(driver, "00_before_login").await?;
 
     let login_field = driver
         .query(By::Css("input.b24net-text-input__field[type='text']"))
-        .wait(Duration::from_secs(5), Duration::from_millis(500))
+        .wait(Duration::from_secs(10), Duration::from_millis(500))
+        .and_clickable()
         .first()
-        .await;
-    take_screenshot(driver, "relits_login___").await?;
+        .await
+        .context("Поле логина не появилось")?;
+    login_field.send_keys(username).await?;
+    login_field.send_keys(Key::Enter).await?;
 
-    if let Ok(field) = login_field {
-        println!("ENTERING...");
-        field.send_keys(username).await?;
-        field.send_keys(Key::Enter).await?;
+    // Скриншот сразу после нажатия Enter
+    sleep(Duration::from_secs(2)).await;
+    take_screenshot(driver, "01_after_login_enter").await?;
 
-        sleep(Duration::from_secs(15)).await;
-        take_screenshot(driver, "relits_pass___").await?;
+    let password_field = driver
+        .query(By::Css("input.b24net-text-input__field[type='password']"))
+        .wait(Duration::from_secs(20), Duration::from_millis(500))
+        .and_clickable()
+        .first()
+        .await
+        .context("Поле пароля не появилось")?;
+    password_field.send_keys(pass).await?;
+    password_field.send_keys(Key::Enter).await?;
 
-        let password_field = driver
-            .query(By::Css("input.b24net-text-input__field[type='password']"))
-            .wait(Duration::from_secs(2), Duration::from_millis(500))
-            .first()
-            .await?;
+    // Скриншот после ввода пароля
+    take_screenshot(driver, "02_after_password_enter").await?;
 
-        password_field.send_keys(pass).await?;
-        password_field.send_keys(Key::Enter).await?;
-    }
     Ok(())
 }
-
-
-
-// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
+// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
 //     sleep(Duration::from_secs(3)).await;
 
-//     take_screenshot(&driver, "relits_login").await?;
+//     take_screenshot(driver, "relits_login").await?;
 
 //     let login_field = driver
 //         .query(By::Css("input.b24net-text-input__field[type='text']"))
 //         .wait(Duration::from_secs(5), Duration::from_millis(500))
 //         .first()
 //         .await;
-//         take_screenshot(&driver, "relits_login___").await?;
-
+//     take_screenshot(driver, "relits_login___").await?;
 
 //     if let Ok(field) = login_field {
 //         println!("ENTERING...");
 //         field.send_keys(username).await?;
-
 //         field.send_keys(Key::Enter).await?;
 
 //         sleep(Duration::from_secs(15)).await;
-
-//         take_screenshot(&driver, "relits_pass___").await?;
-
+//         take_screenshot(driver, "relits_pass___").await?;
 
 //         let password_field = driver
 //             .query(By::Css("input.b24net-text-input__field[type='password']"))
@@ -214,6 +210,9 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
 //     }
 //     Ok(())
 // }
+
+
+
 
 const BASE_URL: &str = "https://relits.bitrix24.ru";
 
@@ -286,3 +285,42 @@ mod tests {
         assert_eq!(login.to_string(), read_from_file(login_file).expect("PANIC"));
     }
 }
+
+
+
+
+// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
+//     sleep(Duration::from_secs(3)).await;
+
+//     take_screenshot(&driver, "relits_login").await?;
+
+//     let login_field = driver
+//         .query(By::Css("input.b24net-text-input__field[type='text']"))
+//         .wait(Duration::from_secs(5), Duration::from_millis(500))
+//         .first()
+//         .await;
+//         take_screenshot(&driver, "relits_login___").await?;
+
+
+//     if let Ok(field) = login_field {
+//         println!("ENTERING...");
+//         field.send_keys(username).await?;
+
+//         field.send_keys(Key::Enter).await?;
+
+//         sleep(Duration::from_secs(15)).await;
+
+//         take_screenshot(&driver, "relits_pass___").await?;
+
+
+//         let password_field = driver
+//             .query(By::Css("input.b24net-text-input__field[type='password']"))
+//             .wait(Duration::from_secs(2), Duration::from_millis(500))
+//             .first()
+//             .await?;
+
+//         password_field.send_keys(pass).await?;
+//         password_field.send_keys(Key::Enter).await?;
+//     }
+//     Ok(())
+// }
