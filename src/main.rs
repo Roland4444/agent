@@ -156,34 +156,35 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         .first()
         .await
         .context("Поле логина не появилось")?;
-    login_field.send_keys(username).await?;
 
-    take_screenshot(driver, "after_login_input").await?; // <-- добавлено
+    // Ввод логина через JavaScript
+    driver.execute(&format!("arguments[0].value = '{}';", username), vec![login_field.to_json()?]).await?;
+    driver.execute("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", vec![login_field.to_json()?]).await?;
+    driver.execute("arguments[0].dispatchEvent(new Event('change', {bubbles: true}));", vec![login_field.to_json()?]).await?;
+    driver.execute("arguments[0].blur();", vec![login_field.to_json()?]).await?;
 
-    let continue_btn = driver
-        .query(By::Css(".b24net-login-enter-form__continue-btn"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .first()
-        .await
-        .context("Кнопка 'Продолжить' не найдена")?;
-    driver.execute("arguments[0].click();", vec![continue_btn.to_json()?]).await?;
+    sleep(Duration::from_secs(2)).await;
 
+    // Прямой JS-клик по кнопке
+    let result = driver.execute("document.querySelector('.b24net-login-enter-form__continue-btn')?.click();", vec![]).await;
+    if let Err(e) = result {
+        take_screenshot(driver, "error_js_click").await?;
+        anyhow::bail!("Не удалось кликнуть по кнопке: {}", e);
+    }
+
+    // Поле пароля
     let password_field = driver
         .query(By::Css("input.b24net-text-input__field[type='password']"))
-        .wait(Duration::from_secs(20), Duration::from_millis(500))
+        .wait(Duration::from_secs(30), Duration::from_millis(500))
         .and_clickable()
         .first()
         .await
         .context("Поле пароля не появилось")?;
+
     password_field.send_keys(pass).await?;
 
-    let submit_btn = driver
-        .query(By::Css(".b24net-password-enter-form__continue-btn"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .first()
-        .await
-        .context("Кнопка 'Продолжить' после пароля не найдена")?;
-    driver.execute("arguments[0].click();", vec![submit_btn.to_json()?]).await?;
+    // Клик по второй кнопке
+    driver.execute("document.querySelector('.b24net-password-enter-form__continue-btn')?.click();", vec![]).await?;
 
     Ok(())
 }
