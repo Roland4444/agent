@@ -74,6 +74,10 @@ async fn init_chrome_driver() -> Result<WebDriver> {
     caps.add_arg("--disable-dev-shm-usage")?;
     caps.add_arg("--headless")?;
     caps.add_arg("--window-size=1920,1080")?;
+    caps.add_arg("--disable-gpu")?;
+    caps.add_arg("--disable-software-rasterizer")?;
+    caps.add_arg("--disable-dev-shm-usage")?;
+    caps.add_arg("--remote-debugging-port=9222")?;
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
     Ok(driver)
 }
@@ -141,6 +145,11 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
         field.send_keys(username).await?;
 
         field.send_keys(Key::Enter).await?;
+
+        sleep(Duration::from_secs(15)).await;
+
+
+
         let password_field = driver
             .query(By::Css("input.b24net-text-input__field[type='password']"))
             .wait(Duration::from_secs(2), Duration::from_millis(500))
