@@ -4,10 +4,9 @@ use std::fs;
 use anyhow::{Result, Context};
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
-use serde_json::Value;
 use chrono::Local;
 use std::path::Path;
-//use futures_util::{SinkExt, StreamExt};
+
 
 const PAYMENTS: &str = "Платежи";
 const OLIVIA: &str = "ОЛИВИЯ МАКСАКОВА";
@@ -20,6 +19,8 @@ const KUIB: &str = "Куйбышева";
 const POLZ: &str = "Ползунова";
 const ZVEZD: &str = "Звездная";
 const SKY: &str = "СКАЙ ИГАРСКАЯ";
+
+const PROFILE_PATH: &str = "PROFILE"; 
 
 
 
@@ -82,22 +83,49 @@ async fn wait_in_sec(delay: u64) {
     sleep(Duration::from_secs(delay)).await;
 }
 
+fn path_profile() -> String {
+    read_from_file(PROFILE_PATH).expect("alarm")
+}
+
+
 async fn init_chrome_driver() -> Result<WebDriver> {
     let mut caps = DesiredCapabilities::chrome();
-    caps.add_arg("--no-sandbox")?;
 
-    caps.add_arg("--headless=new")?;  // вместо --headless
-    caps.add_arg("--disable-blink-features=AutomationControlled")?;
-    caps.add_arg("--disable-features=IsolateOrigins,site-per-process")?;
- //   caps.add_arg("--headless")?;                                //
+   // let profile_path = r"C:\Users\user\Documents\rust\agent\chrome_profile";
+
+    println!("USED DIRECTORY:: {}", path_profile());
+
+    //let profile_path = r"./chrome_profile";
+    std::fs::create_dir_all(path_profile())?;
+    let user_data_arg = format!("--user-data-dir={}", path_profile());
+    caps.add_arg(&user_data_arg)?;
+    caps.add_arg("--no-sandbox")?;
+    caps.add_arg("--disable-dev-shm-usage")?;
+    caps.add_arg("--disable-gpu")?;
     caps.add_arg("--window-size=1920,1080")?;
-    caps.add_arg("--disable-gpu")?;                             //
-    caps.add_arg("--disable-software-rasterizer")?;             //    
-    caps.add_arg("--disable-dev-shm-usage")?;                   //
-  //  caps.add_arg("--remote-debugging-port=9222")?;              //
+    caps.add_arg("--headless=new")?; // при необходимости
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
     Ok(driver)
 }
+
+
+// async fn init_chrome_driver() -> Result<WebDriver> {
+//     let mut caps = DesiredCapabilities::chrome();
+//     caps.add_arg("--no-sandbox")?;
+//     caps.add_arg("--user-data-dir=C:\\Users\\user\\Documents\\rust\\agent\\User Data")?;
+//     caps.add_arg("--profile-directory=Default")?;
+// //    caps.add_arg("--headless=new")?;  // вместо --headless
+//     caps.add_arg("--disable-blink-features=AutomationControlled")?;
+//     caps.add_arg("--disable-features=IsolateOrigins,site-per-process")?;
+//  //   caps.add_arg("--headless")?;                                //
+//     caps.add_arg("--window-size=1920,1080")?;
+//     caps.add_arg("--disable-gpu")?;                             //
+//     caps.add_arg("--disable-software-rasterizer")?;             //    
+//     caps.add_arg("--disable-dev-shm-usage")?;                   //
+//   //  caps.add_arg("--remote-debugging-port=9222")?;              //
+//     let driver = WebDriver::new("http://localhost:21000", caps).await?;
+//     Ok(driver)
+// }
 
 
 async fn process_item_with_delay(_delay: u64, text_collab: &str, driver: &WebDriver) -> Result<()> {
@@ -190,39 +218,6 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
 
     Ok(())
 }
-// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
-//     sleep(Duration::from_secs(3)).await;
-
-//     take_screenshot(driver, "relits_login").await?;
-
-//     let login_field = driver
-//         .query(By::Css("input.b24net-text-input__field[type='text']"))
-//         .wait(Duration::from_secs(5), Duration::from_millis(500))
-//         .first()
-//         .await;
-//     take_screenshot(driver, "relits_login___").await?;
-
-//     if let Ok(field) = login_field {
-//         println!("ENTERING...");
-//         field.send_keys(username).await?;
-//         field.send_keys(Key::Enter).await?;
-
-//         sleep(Duration::from_secs(15)).await;
-//         take_screenshot(driver, "relits_pass___").await?;
-
-//         let password_field = driver
-//             .query(By::Css("input.b24net-text-input__field[type='password']"))
-//             .wait(Duration::from_secs(2), Duration::from_millis(500))
-//             .first()
-//             .await?;
-
-//         password_field.send_keys(pass).await?;
-//         password_field.send_keys(Key::Enter).await?;
-//     }
-//     Ok(())
-// }
-
-
 
 
 const BASE_URL: &str = "https://relits.bitrix24.ru";
@@ -253,10 +248,10 @@ async fn main() -> Result<()> {
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
-    login_cad(&driver, 
-        login().expect("SHIT HAPPENS").as_str(), 
-        pass().expect("SHIT HAPPENS").as_str())
-        .await?;
+    // login_cad(&driver, 
+    //     login().expect("SHIT HAPPENS").as_str(), 
+    //     pass().expect("SHIT HAPPENS").as_str())
+    //     .await?;
     
     wait().await;
     click_collab_simple(&driver).await?;
@@ -295,43 +290,11 @@ mod tests {
         println!("READED:: {}", readed);
         assert_eq!(login.to_string(), read_from_file(login_file).expect("PANIC"));
     }
+
+
+
 }
 
 
 
 
-// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
-//     sleep(Duration::from_secs(3)).await;
-
-//     take_screenshot(&driver, "relits_login").await?;
-
-//     let login_field = driver
-//         .query(By::Css("input.b24net-text-input__field[type='text']"))
-//         .wait(Duration::from_secs(5), Duration::from_millis(500))
-//         .first()
-//         .await;
-//         take_screenshot(&driver, "relits_login___").await?;
-
-
-//     if let Ok(field) = login_field {
-//         println!("ENTERING...");
-//         field.send_keys(username).await?;
-
-//         field.send_keys(Key::Enter).await?;
-
-//         sleep(Duration::from_secs(15)).await;
-
-//         take_screenshot(&driver, "relits_pass___").await?;
-
-
-//         let password_field = driver
-//             .query(By::Css("input.b24net-text-input__field[type='password']"))
-//             .wait(Duration::from_secs(2), Duration::from_millis(500))
-//             .first()
-//             .await?;
-
-//         password_field.send_keys(pass).await?;
-//         password_field.send_keys(Key::Enter).await?;
-//     }
-//     Ok(())
-// }
