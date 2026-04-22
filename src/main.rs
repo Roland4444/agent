@@ -253,7 +253,15 @@ async fn main() -> Result<()> {
     //     pass().expect("SHIT HAPPENS").as_str())
     //     .await?;
     
+
+    take_screenshot(&driver, "after_goto").await?; 
+
+
     wait().await;
+
+    take_screenshot(&driver, "before_click_collab").await?; // <-- добавлен
+
+
     click_collab_simple(&driver).await?;
     wait_in_sec(15).await;
 
