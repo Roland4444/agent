@@ -87,26 +87,64 @@ fn path_profile() -> String {
     read_from_file(PROFILE_PATH).expect("alarm")
 }
 
-
+//  cockie from file                  println!("\n\n\n\nLOADED COCKES::{}\n\n\n", cookies_data);
 async fn init_chrome_driver() -> Result<WebDriver> {
     let mut caps = DesiredCapabilities::chrome();
-
-   // let profile_path = r"C:\Users\user\Documents\rust\agent\chrome_profile";
-
-    println!("USED DIRECTORY:: {}", path_profile());
-
-    //let profile_path = r"./chrome_profile";
-    std::fs::create_dir_all(path_profile())?;
-    let user_data_arg = format!("--user-data-dir={}", path_profile());
-    caps.add_arg(&user_data_arg)?;
+ //   caps.add_arg("--headless=new")?;
     caps.add_arg("--no-sandbox")?;
     caps.add_arg("--disable-dev-shm-usage")?;
-    caps.add_arg("--disable-gpu")?;
     caps.add_arg("--window-size=1920,1080")?;
-    caps.add_arg("--headless=new")?; // при необходимости
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
+   // driver.goto("https://relits.bitrix24.ru/company/personal/user/1").await?;
+
+  //  driver.goto("https://relits.bitrix24.ru").await?;
+    let cookies_data = fs::read_to_string("cookies.json")?;
+
+    println!("\n\n\n\nLOADED COCKES::{}\n\n\n", cookies_data);
+    let original_cookies: Vec<serde_json::Value> = serde_json::from_str(&cookies_data)?;
+    
+    for cookie_val in original_cookies {
+        // Извлекаем имя и значение, а домен не указываем
+        let name = cookie_val["name"].as_str().unwrap_or("");
+        let value = cookie_val["value"].as_str().unwrap_or("");
+        let mut cookie = Cookie::new(name, value);
+        // Копируем остальные поля, кроме domain и sameSite (если нужно)
+        if let Some(expiry) = cookie_val["expiry"].as_u64() {
+            cookie.set_expiry(expiry as i64);//.with_expiry(expiry);
+        }
+        if let Some(secure) = cookie_val["secure"].as_bool() {
+            cookie.set_secure(secure);
+        }
+        if let Some(path) = cookie_val["path"].as_str() {
+            cookie.set_path(path);
+        }
+        // Не устанавливаем domain, пусть браузер сам подставит текущий
+        driver.add_cookie(cookie).await?;
+    }
+    
+    driver.goto("https://relits.bitrix24.ru/company/personal/user/1").await?;
     Ok(driver)
 }
+
+// async fn init_chrome_driver() -> Result<WebDriver> {
+//     let mut caps = DesiredCapabilities::chrome();
+
+//    // let profile_path = r"C:\Users\user\Documents\rust\agent\chrome_profile";
+
+//     println!("USED DIRECTORY:: {}", path_profile());
+
+//     //let profile_path = r"./chrome_profile";
+//     std::fs::create_dir_all(path_profile())?;
+//     let user_data_arg = format!("--user-data-dir={}", path_profile());
+//     caps.add_arg(&user_data_arg)?;
+//     caps.add_arg("--no-sandbox")?;
+//     caps.add_arg("--disable-dev-shm-usage")?;
+//     caps.add_arg("--disable-gpu")?;
+//     caps.add_arg("--window-size=1920,1080")?;
+//     caps.add_arg("--headless=new")?; // при необходимости
+//     let driver = WebDriver::new("http://localhost:21000", caps).await?;
+//     Ok(driver)
+// }
 
 
 // async fn init_chrome_driver() -> Result<WebDriver> {
@@ -242,9 +280,9 @@ async fn main() -> Result<()> {
     ];
     const BASE_URL: &str = "https://relits.bitrix24.ru";
     let user_id = 1;
-    let driver = init_chrome_driver().await?;
+    let driver =   init_chrome_driver().await?;
 
-    let profile_url = format!("{}/company/personal/user/{}", BASE_URL, user_id);
+    let profile_url = format!("{}/company/personal/user/{}", BASE_URL, user_id); 
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
@@ -297,6 +335,22 @@ mod tests {
         let readed = read_from_file(login_file).expect("not found");
         println!("READED:: {}", readed);
         assert_eq!(login.to_string(), read_from_file(login_file).expect("PANIC"));
+    }
+
+
+    #[tokio::test]
+    async fn test_grep_copckies() -> Result<()> {
+        let mut caps = DesiredCapabilities::chrome();
+        let driver = WebDriver::new("http://localhost:21000", caps).await?;
+        driver.goto("https://relits.bitrix24.ru").await?;
+        wait_in_sec(24).await;
+        wait_in_sec(15).await;
+        let cookies = driver.get_all_cookies().await?;
+        let json = serde_json::to_string(&cookies)?;
+        fs::write("cookies.json", json)?;
+        driver.quit().await?;
+        Ok(())
+
     }
 
 
