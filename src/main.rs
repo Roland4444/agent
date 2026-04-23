@@ -86,7 +86,7 @@ async fn init_chrome_driver() -> Result<WebDriver> {
     let mut caps = DesiredCapabilities::chrome();
     caps.add_arg("--no-sandbox")?;
 
-    caps.add_arg("--headless=new")?;  // вместо --headless
+ // caps.add_arg("--headless=new")?;  // вместо --headless
     caps.add_arg("--disable-blink-features=AutomationControlled")?;
     caps.add_arg("--disable-features=IsolateOrigins,site-per-process")?;
  //   caps.add_arg("--headless")?;                                //
