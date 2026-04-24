@@ -1,16 +1,20 @@
 use std::fs;
 //          python3 -m http.server 9999
 
-use anyhow::{Result, Context};
+use crate::http_handler::ExtractResp;
+use anyhow::{Context, Result};
+use chrono::Local;
+use serde_json::Value;
+use std::path::Path;
+use std::sync::Arc;
+use std::thread;
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
-use serde_json::Value;
-use chrono::Local;
-use std::path::Path;
-use std::thread;
-use std::sync::Arc;
 
+use serde_json::json;
 
+use futures_util::{SinkExt, StreamExt};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 pub mod http_handler;
 //use futures_util::{SinkExt, StreamExt};
 
@@ -26,14 +30,10 @@ const POLZ: &str = "Ползунова";
 const ZVEZD: &str = "Звездная";
 const SKY: &str = "СКАЙ ИГАРСКАЯ";
 
-
-
 const OWN: &str = "OWN";
 
 const PASS_FIELNAME: &str = "pass";
 const LOGIN_FILENAME: &str = "login";
-
-
 
 fn pass() -> Option<String> {
     read_from_file(PASS_FIELNAME)
@@ -44,13 +44,12 @@ fn login() -> Option<String> {
 }
 
 fn read_from_file(filename: &str) -> Option<String> {
-    let g  = fs::read_to_string(filename);
+    let g = fs::read_to_string(filename);
     match g {
         Ok(str) => Some(str),
-        Err(_ ) => None,
+        Err(_) => None,
     }
 }
-
 
 async fn take_screenshot(driver: &WebDriver, base_name: &str) -> Result<String> {
     let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
@@ -91,24 +90,23 @@ async fn init_chrome_driver() -> Result<Arc<WebDriver>> {
     let mut caps = DesiredCapabilities::chrome();
     caps.add_arg("--no-sandbox")?;
 
- // caps.add_arg("--headless=new")?;  // вместо --headless
+    // caps.add_arg("--headless=new")?;  // вместо --headless
     caps.add_arg("--disable-blink-features=AutomationControlled")?;
     caps.add_arg("--disable-features=IsolateOrigins,site-per-process")?;
- //   caps.add_arg("--headless")?;                                //
+    //   caps.add_arg("--headless")?;                                //
     caps.add_arg("--window-size=1920,1080")?;
-    caps.add_arg("--disable-gpu")?;                             //
-    caps.add_arg("--disable-software-rasterizer")?;             //    
-    caps.add_arg("--disable-dev-shm-usage")?;                   //
-  //  caps.add_arg("--remote-debugging-port=9222")?;              //
+    caps.add_arg("--disable-gpu")?; //
+    caps.add_arg("--disable-software-rasterizer")?; //    
+    caps.add_arg("--disable-dev-shm-usage")?; //
+    //  caps.add_arg("--remote-debugging-port=9222")?;              //
     let driver = WebDriver::new("http://localhost:21000", caps).await?;
     Ok(Arc::new(driver))
 }
 
-
 async fn process_item_with_delay(_delay: u64, text_collab: &str, driver: &WebDriver) -> Result<()> {
     click_collab_simple_text(&driver, text_collab).await?;
     scroll_chat_to_bottom(driver).await?;
-    wait_in_sec(15).await;
+    wait_in_sec(_delay).await;
     Ok(())
 }
 
@@ -195,47 +193,88 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
 
     Ok(())
 }
-// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
-//     sleep(Duration::from_secs(3)).await;
-
-//     take_screenshot(driver, "relits_login").await?;
-
-//     let login_field = driver
-//         .query(By::Css("input.b24net-text-input__field[type='text']"))
-//         .wait(Duration::from_secs(5), Duration::from_millis(500))
-//         .first()
-//         .await;
-//     take_screenshot(driver, "relits_login___").await?;
-
-//     if let Ok(field) = login_field {
-//         println!("ENTERING...");
-//         field.send_keys(username).await?;
-//         field.send_keys(Key::Enter).await?;
-
-//         sleep(Duration::from_secs(15)).await;
-//         take_screenshot(driver, "relits_pass___").await?;
-
-//         let password_field = driver
-//             .query(By::Css("input.b24net-text-input__field[type='password']"))
-//             .wait(Duration::from_secs(2), Duration::from_millis(500))
-//             .first()
-//             .await?;
-
-//         password_field.send_keys(pass).await?;
-//         password_field.send_keys(Key::Enter).await?;
-//     }
-//     Ok(())
-// }
-
-
-
 
 const BASE_URL: &str = "https://relits.bitrix24.ru";
 
+pub async fn extract_quoted_text_by_chat_and_message_id(
+    driver: &WebDriver,
+    chat_name: &str,
+    message_id: &str,
+) -> Result<String> {
+    click_collab_simple_text(driver, chat_name).await?;
 
+    sleep(Duration::from_secs(5)).await;
+
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let msg_element = driver.find(msg_selector).await.with_context(|| {
+        format!(
+            "Сообщение с data-id={} не найдено в чате {}",
+            message_id, chat_name
+        )
+    })?;
+
+    let quote_selector = By::Css(".bx-im-message-quote__text");
+    let quote_element = msg_element
+        .find(quote_selector)
+        .await
+        .context("Не найден блок цитируемого текста (bx-im-message-quote__text)")?;
+
+    let quoted_text = quote_element.text().await?;
+    Ok(quoted_text)
+}
+
+async fn send_msg_ws(msg: String) -> () {
+    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/ws")
+        .await
+        .expect("Не удалось подключиться к серверу");
+
+    ws_stream
+        .send(Message::text(msg))
+        .await
+        .expect("Ошибка отправки сообщения");
+
+    if let Some(Ok(Message::Text(reply))) = ws_stream.next().await {
+        println!("Ответ сервера: {}", reply);
+    } else {
+        eprintln!("Сервер не ответил");
+    }
+
+    ws_stream.close(None).await.ok();
+}
+
+pub async fn get_text_via_chat_id_and_id(chat_name: String, message_id: u64) -> Result<String> {
+    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/proc")
+        .await
+        .context("Не удалось подключиться к WebSocket")?;
+
+    let request = json!({
+        "collab": chat_name,
+        "message_id": message_id   // исправлено название поля
+    });
+
+    let request_bytes = serde_json::to_vec(&request)?;
+    ws_stream
+        .send(Message::Binary(request_bytes.into()))
+        .await?;
+
+    if let Some(Ok(Message::Text(resp_text))) = ws_stream.next().await {
+        let resp: ExtractResp = serde_json::from_str(&resp_text)?;
+        if resp.success {
+            if let Some(text) = resp.quoted_text {
+                println!("EXTRACTED: {}", text);
+                return Ok(text);
+            } else {
+                anyhow::bail!("Ответ не содержит текста");
+            }
+        } else {
+            anyhow::bail!("Ошибка сервера: {}", resp.error.unwrap_or_default());
+        }
+    }
+
+    anyhow::bail!("Не получен ответ от сервера");
+}
 #[tokio::main]
 async fn main() -> Result<()> {
-
     let test = [PAYMENTS, OWN];
     let iterate = [
         PAYMENTS,
@@ -249,26 +288,27 @@ async fn main() -> Result<()> {
         POLZ,
         ZVEZD,
         SKY,
-        OWN
+        OWN,
     ];
+
     const BASE_URL: &str = "https://relits.bitrix24.ru";
     let user_id = 1;
     let driver = init_chrome_driver().await?;
-
 
     let profile_url = format!("{}/company/personal/user/{}", BASE_URL, user_id);
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
-    login_cad(&driver, 
-        login().expect("SHIT HAPPENS").as_str(), 
-        pass().expect("SHIT HAPPENS").as_str())
-        .await?;
-    
+    login_cad(
+        &driver,
+        login().expect("SHIT HAPPENS").as_str(),
+        pass().expect("SHIT HAPPENS").as_str(),
+    )
+    .await?;
+
     wait().await;
     click_collab_simple(&driver).await?;
     wait_in_sec(15).await;
-
 
     let driver_clone = driver.clone();
     let server_handle = tokio::spawn(async move {
@@ -277,28 +317,29 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Ждём сигнала завершения (Ctrl+C)
+    //     tokio::signal::ctrl_c().await?;
+    //     println!("Shutting down...");
+    //  //    driver.quit().await?;
+    //     server_handle.abort();
+    //     Ok(())
+
     // for item in iterate.iter() {
     //     if let Err(e) = process_item_with_delay(15, item, &driver).await {
     //         eprintln!("Ошибка при клике по '{}': {}", item, e);
     //     }
     // }
 
-    
-
-
-    
-
     loop {
         println!("Main thread works...");
         thread::sleep(Duration::from_secs(1));
     }
 
-
-    driver.quit().await?;
+    // driver.quit().await?;
 
     //  try_grub().await
-    Ok(())}
-
+    Ok(())
+}
 
 #[cfg(test)]
 
@@ -306,81 +347,57 @@ mod tests {
 
     //use crate::add_magyar;
     use super::*;
-    use tokio_tungstenite::{connect_async, tungstenite::Message};
-    use futures_util::{SinkExt, StreamExt};
+    use crate::http_handler::ExtractResp;
+
     #[test]
-    fn test_add(){
+    fn test_add() {
         assert_eq!(3, add_magyar(1, 2));
     }
 
-
     #[test]
-    fn test_read_login(){
+    fn test_read_login() {
         let login_file = "login.txt";
         let login = "rpastushkovb@relits.ru";
-        let _ =  fs::write(login_file, login);
+        let _ = fs::write(login_file, login);
         let readed = read_from_file(login_file).expect("not found");
         println!("READED:: {}", readed);
-        assert_eq!(login.to_string(), read_from_file(login_file).expect("PANIC"));
+        assert_eq!(
+            login.to_string(),
+            read_from_file(login_file).expect("PANIC")
+        );
     }
 
     #[tokio::test]
     async fn test_send_own_to_websocket() {
-        let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/ws")
-            .await
-            .expect("Не удалось подключиться к серверу");
-
-        ws_stream
-            .send(Message::text("Платежи"))
-            .await
-            .expect("Ошибка отправки сообщения");
-
-        if let Some(Ok(Message::Text(reply))) = ws_stream.next().await {
-            println!("Ответ сервера: {}", reply);
-        } else {
-            eprintln!("Сервер не ответил");
+        let iterate = [
+            PAYMENTS,
+            TETRIS,
+            KUIB,
+            OLIVIA,
+            BABEFA,
+            OKLAND,
+            RED,
+            SCANDINAVIA,
+            POLZ,
+            ZVEZD,
+            SKY,
+            OWN,
+        ];
+        for item in iterate.iter() {
+            send_msg_ws(item.to_string()).await;
         }
-
-        ws_stream.close(None).await.ok();
     }
 
+    #[tokio::test]
+    async fn test_websocket_extract_quote() {
+        let resp = get_text_via_chat_id_and_id(OKLAND.to_string(), 118782).await;
+        match resp {
+            Ok(text) => {
+                println!("EXTRACTED::{}", text)
+            }
+            Err(_) => {
+                println!("FAILED!")
+            }
+        }
+    }
 }
-
-
-
-
-// async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>{
-//     sleep(Duration::from_secs(3)).await;
-
-//     take_screenshot(&driver, "relits_login").await?;
-
-//     let login_field = driver
-//         .query(By::Css("input.b24net-text-input__field[type='text']"))
-//         .wait(Duration::from_secs(5), Duration::from_millis(500))
-//         .first()
-//         .await;
-//         take_screenshot(&driver, "relits_login___").await?;
-
-
-//     if let Ok(field) = login_field {
-//         println!("ENTERING...");
-//         field.send_keys(username).await?;
-
-//         field.send_keys(Key::Enter).await?;
-
-//         sleep(Duration::from_secs(15)).await;
-
-//         take_screenshot(&driver, "relits_pass___").await?;
-
-
-//         let password_field = driver
-//             .query(By::Css("input.b24net-text-input__field[type='password']"))
-//             .wait(Duration::from_secs(2), Duration::from_millis(500))
-//             .first()
-//             .await?;
-
-//         password_field.send_keys(pass).await?;
-//         password_field.send_keys(Key::Enter).await?;
-//     }
-//     Ok(())
-// }
