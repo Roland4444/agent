@@ -30,10 +30,7 @@ fn login() -> Option<String> {
 
 fn read_from_file(filename: &str) -> Option<String> {
     let g = fs::read_to_string(filename);
-    match g {
-        Ok(str) => Some(str),
-        Err(_) => None,
-    }
+    match g {        Ok(str) => Some(str),        Err(_) => None,}
 }
 
 async fn take_screenshot(driver: &WebDriver, base_name: &str) -> Result<String> {
@@ -101,35 +98,20 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
     let mut iteration = 0;
     loop {
         iteration += 1;
-        let button_selector = By::Css(
-            ".bx-im-dialog-chat__float-buttons_button, .bx-im-dialog-chat__float-button_icon",
-        );
-        match driver
-            .query(button_selector)
-            .wait(Duration::from_secs(2), Duration::from_millis(300))
-            .and_clickable()
-            .first()
-            .await
+        let button_selector = By::Css(            ".bx-im-dialog-chat__float-buttons_button, .bx-im-dialog-chat__float-button_icon",        );
+        match driver.query(button_selector).wait(Duration::from_secs(2), Duration::from_millis(300)).and_clickable().first().await
         {
             Ok(button) => {
                 println!("Iteration:: {}, click button!", iteration);
                 if let Err(e) = button.click().await {
                     println!("CLICL FAILED - {}. TRY JS", e);
-                    driver
-                        .execute("arguments[0].click();", vec![button.to_json()?])
-                        .await?;
+                    driver.execute("arguments[0].click();", vec![button.to_json()?]).await?;
                 }
                 sleep(Duration::from_millis(1500)).await;
             }
-            Err(_) => {
-                println!("Button not found! Stop!");
-                break;
-            }
+            Err(_) => {                println!("Button not found! Stop!");                break;            }
         }
-        if iteration >= 20 {
-            println!("REACHED LIMIT ITERATIONS!!!");
-            break;
-        }
+        if iteration >= 20 {            println!("REACHED LIMIT ITERATIONS!!!");            break;        }
     }
     println!("SCROLL COMPLETE!");
     Ok(())
@@ -137,23 +119,14 @@ async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
 
 async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()> {
     // Поле логина
-    let login_field = driver
-        .query(By::Css("input.b24net-text-input__field[type='text']"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .and_clickable()
-        .first()
-        .await
-        .context("Поле логина не появилось")?;
+    let login_field = driver.query(By::Css("input.b24net-text-input__field[type='text']")).wait(Duration::from_secs(10), Duration::from_millis(500))
+        .and_clickable().first().await.context("Поле логина не появилось")?;
     login_field.send_keys(username).await?;
 
     // Кнопка "Продолжить" (первая)
     let continue_btn = driver
-        .query(By::Css(".b24net-login-enter-form__continue-btn"))
-        .wait(Duration::from_secs(10), Duration::from_millis(500))
-        .and_clickable()
-        .first()
-        .await
-        .context("Кнопка 'Продолжить' не появилась")?;
+        .query(By::Css(".b24net-login-enter-form__continue-btn")).wait(Duration::from_secs(10), Duration::from_millis(500))
+        .and_clickable().first().await.context("Кнопка 'Продолжить' не появилась")?;
     continue_btn.click().await?;
 
     // Поле пароля
@@ -181,100 +154,63 @@ async fn login_cad(driver: &WebDriver, username: &str, pass: &str) -> Result<()>
 
 const BASE_URL: &str = "https://relits.bitrix24.ru";
 
-pub async fn extract_quoted_text_by_chat_and_message_id(
-    driver: &WebDriver,
-    chat_name: &str,
-    message_id: &str,
-) -> Result<String> {
+pub async fn extract_quoted_text_by_chat_and_message_id(   driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<String> {
     click_collab_simple_text(driver, chat_name).await?;
-
     sleep(Duration::from_secs(5)).await;
-
     let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
-    let msg_element = driver.find(msg_selector).await.with_context(|| {
-        format!(
-            "Сообщение с data-id={} не найдено в чате {}",
-            message_id, chat_name
-        )
-    })?;
-
+    let msg_element = driver.find(msg_selector).await.with_context(|| {  format!("Сообщение с data-id={} не найдено в чате {}", message_id, chat_name ) })?;
     let quote_selector = By::Css(".bx-im-message-quote__text");
-    let quote_element = msg_element
-        .find(quote_selector)
-        .await
-        .context("Не найден блок цитируемого текста (bx-im-message-quote__text)")?;
-
+    let quote_element = msg_element.find(quote_selector).await.context("Не найден блок цитируемого текста (bx-im-message-quote__text)")?;
     let quoted_text = quote_element.text().await?;
     Ok(quoted_text)
 }
 
 async fn send_msg_ws(msg: String) -> () {
-    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/ws")
-        .await
-        .expect("Не удалось подключиться к серверу");
+    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/ws").await.expect("Не удалось подключиться к серверу");
 
-    ws_stream
-        .send(Message::text(msg))
-        .await
-        .expect("Ошибка отправки сообщения");
+    ws_stream.send(Message::text(msg)).await.expect("Ошибка отправки сообщения");
 
-    if let Some(Ok(Message::Text(reply))) = ws_stream.next().await {
-        println!("Ответ сервера: {}", reply);
-    } else {
-        eprintln!("Сервер не ответил");
-    }
-
+    if let Some(Ok(Message::Text(reply))) = ws_stream.next().await {   println!("Ответ сервера: {}", reply); } 
+    else {        eprintln!("Сервер не ответил");    }
     ws_stream.close(None).await.ok();
 }
 
+pub async fn extract_quote_info_by_chat_and_message_id(    driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<QuoteInfo> {
+    click_collab_simple_text(driver, chat_name).await?;
+    sleep(Duration::from_secs(5)).await;
+
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let msg_element = driver.find(msg_selector).await.with_context(|| {     format!("Сообщение с data-id={} не найдено в чате {}", message_id, chat_name)})?;
+
+    let author_selector = By::Css(".bx-im-message-author-title__container .bx-im-chat-title__text");
+    let message_author = msg_element.find(author_selector).await.context("Не найден автор сообщения")?.text().await?;
+
+    let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {        el.text().await.ok()    } 
+    else {        None    };    // Автор цитируемого сообщения
+    let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await.context("Не найден автор цитаты")?.text().await?;
+    let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await.context("Не найден текст цитаты")?.text().await?;
+
+    Ok(QuoteInfo {        message_id: message_id.to_string(),        message_author,        quoted_author,        quoted_text,        reply_text,    })
+}
+
 pub async fn get_text_via_chat_id_and_id(chat_name: String, message_id: u64) -> Result<String> {
-    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/proc")
-        .await
-        .context("Не удалось подключиться к WebSocket")?;
-
-    let request = json!({
-        "collab": chat_name,
-        "message_id": message_id   // исправлено название поля
-    });
-
+    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/proc").await.context("Не удалось подключиться к WebSocket")?;
+    let request = json!({        "collab": chat_name,        "message_id": message_id  });
     let request_bytes = serde_json::to_vec(&request)?;
-    ws_stream
-        .send(Message::Binary(request_bytes.into()))
-        .await?;
+    ws_stream.send(Message::Binary(request_bytes.into())).await?;
 
     if let Some(Ok(Message::Text(resp_text))) = ws_stream.next().await {
         let resp: ExtractResp = serde_json::from_str(&resp_text)?;
         if resp.success {
-            if let Some(text) = resp.quoted_text {
-                println!("EXTRACTED: {}", text);
-                return Ok(text);
-            } else {
-                anyhow::bail!("Ответ не содержит текста");
-            }
-        } else {
-            anyhow::bail!("Ошибка сервера: {}", resp.error.unwrap_or_default());
-        }
-    }
-
+            if let Some(text) = resp.quoted_text {                println!("EXTRACTED: {}", text);                return Ok(text);            } 
+            else {                anyhow::bail!("Ответ не содержит текста");            }}
+        else {            anyhow::bail!("Ошибка сервера: {}", resp.error.unwrap_or_default());        }}
     anyhow::bail!("Не получен ответ от сервера");
 }
 #[tokio::main]
 async fn main() -> Result<()> {
     let test = [PAYMENTS, OWN];
-    let iterate = [
-        PAYMENTS,
-        TETRIS, 
-        KUIB,
-        OLIVIA,
-        BABEFA,
-        OKLAND,
-        RED,
-        SCANDINAVIA,
-        POLZ,
-        ZVEZD,
-        SKY,
-        OWN,
-    ];
+    let iterate = [PAYMENTS, TETRIS, KUIB, OLIVIA, BABEFA, OKLAND, RED, SCANDINAVIA,   POLZ, ZVEZD,  SKY,   OWN,    ];
 
     const BASE_URL: &str = "https://relits.bitrix24.ru";
     let user_id = 1;
@@ -284,45 +220,20 @@ async fn main() -> Result<()> {
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
-    login_cad(
-        &driver,
-        login().expect("SHIT HAPPENS").as_str(),
-        pass().expect("SHIT HAPPENS").as_str(),
-    )
-    .await?;
-
+    login_cad( &driver,login().expect("SHIT HAPPENS").as_str(),  pass().expect("SHIT HAPPENS").as_str(),  ).await?;
     wait().await;
     click_collab_simple(&driver).await?;
     wait_in_sec(15).await;
 
     let driver_clone = driver.clone();
     let server_handle = tokio::spawn(async move {
-        if let Err(e) = http_handler::spawn(driver_clone).await {
-            eprintln!("Server error: {}", e);
-        }
-    });
-
-    // Ждём сигнала завершения (Ctrl+C)
-    //     tokio::signal::ctrl_c().await?;
-    //     println!("Shutting down...");
-    //  //    driver.quit().await?;
-    //     server_handle.abort();
-    //     Ok(())
-
-    // for item in iterate.iter() {
-    //     if let Err(e) = process_item_with_delay(15, item, &driver).await {
-    //         eprintln!("Ошибка при клике по '{}': {}", item, e);
-    //     }
-    // }
+        if let Err(e) = http_handler::spawn(driver_clone).await {            eprintln!("Server error: {}", e);        } });
 
     loop {
         println!("Main thread works...");
         thread::sleep(Duration::from_secs(1));
     }
 
-    // driver.quit().await?;
-
-    //  try_grub().await
     Ok(())
 }
 
@@ -353,35 +264,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_own_to_websocket() {
-        let iterate = [
-            PAYMENTS,
-            TETRIS,
-            KUIB,
-            OLIVIA,
-            BABEFA,
-            OKLAND,
-            RED,
-            SCANDINAVIA,
-            POLZ,
-            ZVEZD,
-            SKY,
-            OWN,
-        ];
-        for item in iterate.iter() {
-            send_msg_ws(item.to_string()).await;
-        }
+        let iterate = [PAYMENTS, TETRIS, KUIB, OLIVIA, BABEFA, OKLAND, RED, SCANDINAVIA,   POLZ, ZVEZD,  SKY,   OWN,    ];
+        for item in iterate.iter() {            send_msg_ws(item.to_string()).await;     }
     }
 
     #[tokio::test]
     async fn test_websocket_extract_quote() {
         let resp = get_text_via_chat_id_and_id(OKLAND.to_string(), 118782).await;
         match resp {
-            Ok(text) => {
-                println!("EXTRACTED::{}", text)
-            }
-            Err(_) => {
-                println!("FAILED!")
-            }
+            Ok(text) => {                println!("EXTRACTED::{}", text)            }
+            Err(_) => {                println!("FAILED!")            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_extract_full_info() {
+        let resp = extract_quote_info_by_chat_and_message_id(OKLAND.to_string(), 118782).await;
+        match resp {
+            Ok(text) => {                println!("EXTRACTED::{}", text)            }          
+            Err(_) => {                println!("FAILED!")            }
         }
     }
 }

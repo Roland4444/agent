@@ -14,47 +14,27 @@ use thirtyfour::prelude::*;
 use common::*;
 
 // Состояние приложения
-pub struct AppState {
-    driver: Arc<WebDriver>,
-}
+pub struct AppState {  driver: Arc<WebDriver>,}
 
 
-
-
-async fn extract_quoted_text(
-    driver: &WebDriver,
-    chat_name: &str,
-    message_id: u64,
-) -> Result<String> {
+async fn extract_quoted_text(   driver: &WebDriver,   chat_name: &str,    message_id: u64,) -> Result<String> {
     let condition = format!("//*[text()='{}']", chat_name);
     let by_xpath = By::XPath(condition);
-    let element = driver
-        .find(by_xpath)
-        .await
-        .with_context(|| format!("Чат '{}' не найден", chat_name))?;
+    let element = driver.find(by_xpath).await.with_context(|| format!("Чат '{}' не найден", chat_name))?;
     element.click().await?;
 
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
-    let msg_element = driver
-        .find(msg_selector)
-        .await
-        .with_context(|| format!("Сообщение с id={} не найдено", message_id))?;
+    let msg_element = driver.find(msg_selector).await.with_context(|| format!("Сообщение с id={} не найдено", message_id))?;
 
     let quote_selector = By::Css(".bx-im-message-quote__text");
-    let quote_element = msg_element
-        .find(quote_selector)
-        .await
-        .context("Блок цитаты не найден")?;
-
+    let quote_element = msg_element.find(quote_selector).await.context("Блок цитаты не найден")?;
     let text = quote_element.text().await?;
     Ok(text)
 }
 
-async fn proc_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
-    ws.on_upgrade(|socket| handle_proc_socket(socket, state))
-}
+async fn proc_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {ws.on_upgrade(|socket| handle_proc_socket(socket, state))}
 
 async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
     while let Some(Ok(msg)) = socket.recv().await {
@@ -63,18 +43,34 @@ async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 let req: ExtractReq = match serde_json::from_slice(&bin) {
                     Ok(r) => r,
                     Err(e) => {
-                        let resp = ExtractResp {
-                            success: false,
-                            quoted_text: None,
-                            error: Some(format!("Invalid JSON: {}", e)),
-                        };
-                        let _ = socket
-                            .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
-                            .await;
+                        let resp = ExtractResp {success: false, quoted_text: None, error: Some(format!("Invalid JSON: {}", e)),};
+                        let _ = socket.send(Message::Text(serde_json::to_string(&resp).unwrap().into())).await;
                         continue;
                     }
                 };
-                let result = extract_quoted_text(&state.driver, &req.collab, req.message_id).await;
+                
+
+                match req.type__{
+                    type_operation::ExtractSimple => {
+
+                        let result = extract_quoted_text(&state.driver, &req.collab, req.message_id).await;
+                        let resp = match result {
+                            Ok(text) => ExtractResp{success: true,  quoted_text: Some(text), error: None},
+                            Err(e)   => ExtractResp{success: false, quoted_text: None,       error: Some(e.to_string())  },
+
+                        };
+
+                        let _ = socket.send(Message::Text(serde_json::to_string(&resp).unwrap().into())).await;
+                    }            
+                    
+                    type_operation::ExtractFull => {
+                        
+                    }
+
+
+                }    
+
+
                 let resp = match result {
                     Ok(text) => ExtractResp {
                         success: true,
