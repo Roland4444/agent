@@ -30,11 +30,7 @@ pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<
     element.click().await?;
     Ok(())
 }
-pub async fn extract_quote_info_by_chat_and_message_id(
-    driver: &WebDriver,
-    chat_name: &str,
-    message_id: u64,
-) -> Result<QuoteInfo> {
+pub async fn extract_quote_info_by_chat_and_message_id(driver: &WebDriver,chat_name: &str,message_id: u64,) -> Result<QuoteInfo> {
     // 1. Открываем чат
     let condition = format!("//*[text()='{}']", chat_name);
     let by_xpath = By::XPath(condition);
@@ -47,20 +43,17 @@ pub async fn extract_quote_info_by_chat_and_message_id(
     let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
     let msg_element = driver.find(msg_selector).await
         .with_context(|| format!("Сообщение с id={} не найдено", message_id))?;
-
-    // 3. Автор ответа
+    // Вывод HTML в консоль
+    let html = msg_element.get_attribute("outerHTML").await?;
+    println!("HTML элемента msg_element:\n{}", html.unwrap());
+    // 3. Автор ответа          bx-im-chat-title__text
     let author_selector = By::Css(".bx-im-chat-title__text");
-    let message_author = msg_element.find(author_selector).await
-        .context("Не найден автор ответа")?
-        .text()
-        .await?;
+    let message_author ="EFES;".to_string();//msg_element.find(author_selector).await.context("Не найден автор ответа")?.text().await?;
 
     // 4. Текст ответа (может отсутствовать)
     let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {
-        el.text().await.ok()
-    } else {
-        None
-    };
+        el.text().await.ok()} 
+    else {        None    };
 
     // 5. Автор цитаты
     let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await
@@ -74,30 +67,24 @@ pub async fn extract_quote_info_by_chat_and_message_id(
         .text()
         .await?;
 
-    Ok(QuoteInfo {
-        message_author,
-        reply_text,
-        quoted_author,
-        quoted_text,
-        message_id: message_id.to_string(),
-    })
+    Ok(QuoteInfo {        message_author,reply_text,quoted_author,quoted_text,message_id:message_id.to_string(),})
 }
-pub async fn extract_quote_info_by_chat_and_message_id2(    driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<QuoteInfo> {
-    click_collab_simple_text(driver, chat_name).await?;
-    wait_in_sec(3).await;
-    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
-    let msg_element = driver.find(msg_selector).await.with_context(|| {     format!("Сообщение с data-id={} не найдено в чате {}", message_id, chat_name)})?;
+// pub async fn extract_quote_info_by_chat_and_message_id2(    driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<QuoteInfo> {
+//     click_collab_simple_text(driver, chat_name).await?;
+//     wait_in_sec(3).await;
+//     let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+//     let msg_element = driver.find(msg_selector).await.with_context(|| {     format!("Сообщение с data-id={} не найдено в чате {}", message_id, chat_name)})?;
 
-    let author_selector = By::Css(".bx-im-message-author-title__container .bx-im-chat-title__text");
-    let message_author = "NONAME";///..msg_element.find(author_selector).await.context("Не найден автор сообщения")?.text().await?;
+//     let author_selector = By::Css(".bx-im-message-author-title__container .bx-im-chat-title__text");
+//     let message_author = "NONAME";///..msg_element.find(author_selector).await.context("Не найден автор сообщения")?.text().await?;
 
-    let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {        el.text().await.ok()    } 
-    else {        None    };    // Автор цитируемого сообщения
-    let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await.context("Не найден автор цитаты")?.text().await?;
-    let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await.context("Не найден текст цитаты")?.text().await?;
+//     let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {        el.text().await.ok()    } 
+//     else {        None    };    // Автор цитируемого сообщения
+//     let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await.context("Не найден автор цитаты")?.text().await?;
+//     let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await.context("Не найден текст цитаты")?.text().await?;
 
-    Ok(QuoteInfo {        message_id: message_id.to_string(),        message_author.to_string(),        quoted_author,        quoted_text,        reply_text,    })
-}
+//     Ok(QuoteInfo {message_id.to_string(),        message_author.to_string(),        quoted_author,        quoted_text,        reply_text,    })
+// }
 
 
 async fn extract_quoted_text(   driver: &WebDriver,   chat_name: &str,    message_id: u64,) -> Result<String> {
@@ -209,13 +196,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 if let Err(e) = crate::process_item_with_delay(0, &text, &state.driver).await {
                     eprintln!("Ошибка обработки: {}", e);
                 }
-                if socket
-                    .send(Message::Text(format!("ECHO:: {}", text).into()))
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
+                if socket.send(Message::Text(format!("ECHO:: {}", text).into())).await.is_err(){ break; }
             }
             Message::Close(_) => break,
             _ => {}
