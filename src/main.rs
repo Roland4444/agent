@@ -20,6 +20,8 @@ pub mod http_handler;
 pub const PASS_FIELNAME: &str = "pass";
 const LOGIN_FILENAME: &str = "login";
 
+const URL_WS_CONNECT: &str = "ws://127.0.0.1:3000/proc";
+
 fn pass() -> Option<String> {
     read_from_file(PASS_FIELNAME)
 }
@@ -175,27 +177,34 @@ async fn send_msg_ws(msg: String) -> () {
     ws_stream.close(None).await.ok();
 }
 
-pub async fn extract_quote_info_by_chat_and_message_id(    driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<QuoteInfo> {
-    click_collab_simple_text(driver, chat_name).await?;
-    sleep(Duration::from_secs(5)).await;
+pub async fn get_full_info_via_id_and_chat(chat_name: String, message_id: u64) -> Result<QuoteInfo> {
+    let (mut ws_stream, _) = connect_async(URL_WS_CONNECT)        .await        .context("Не удалось подключиться к WebSocket")?;
 
-    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
-    let msg_element = driver.find(msg_selector).await.with_context(|| {     format!("Сообщение с data-id={} не найдено в чате {}", message_id, chat_name)})?;
+    let req = json!({        "collab": chat_name,        "message_id": message_id,        "type__": "ExtractFull"    });
+    let req_bytes = serde_json::to_vec(&req)?;
+    ws_stream.send(Message::Binary(req_bytes.into())).await?;
 
-    let author_selector = By::Css(".bx-im-message-author-title__container .bx-im-chat-title__text");
-    let message_author = msg_element.find(author_selector).await.context("Не найден автор сообщения")?.text().await?;
-
-    let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {        el.text().await.ok()    } 
-    else {        None    };    // Автор цитируемого сообщения
-    let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await.context("Не найден автор цитаты")?.text().await?;
-    let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await.context("Не найден текст цитаты")?.text().await?;
-
-    Ok(QuoteInfo {        message_id: message_id.to_string(),        message_author,        quoted_author,        quoted_text,        reply_text,    })
+    if let Some(Ok(Message::Text(resp_text))) = ws_stream.next().await {
+        let resp: ExtractResp = serde_json::from_str(&resp_text)?;  // сначала разбираем обёртку
+        if resp.success {
+            if let Some(json_str) = resp.quoted_text {
+                let quote_info: QuoteInfo = serde_json::from_str(&json_str)?; // потом внутренность
+                println!("Полная информация: {:?}", quote_info);
+                return Ok(quote_info);
+            } else {
+                anyhow::bail!("Ответ не содержит данных");
+            }
+        } else {
+            anyhow::bail!("Ошибка сервера: {}", resp.error.unwrap_or_default());
+        }
+    }
+    anyhow::bail!("Не получен ответ от сервера");
 }
 
+
 pub async fn get_text_via_chat_id_and_id(chat_name: String, message_id: u64) -> Result<String> {
-    let (mut ws_stream, _) = connect_async("ws://127.0.0.1:3000/proc").await.context("Не удалось подключиться к WebSocket")?;
-    let request = json!({        "collab": chat_name,        "message_id": message_id  });
+    let (mut ws_stream, _) = connect_async(URL_WS_CONNECT).await.context("Не удалось подключиться к WebSocket")?;
+    let request = json!({        "collab": chat_name,        "message_id": message_id, "type__":  "ExtractSimple" });
     let request_bytes = serde_json::to_vec(&request)?;
     ws_stream.send(Message::Binary(request_bytes.into())).await?;
 
@@ -277,12 +286,24 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_websocket_extract_full_info() {
-        let resp = extract_quote_info_by_chat_and_message_id(OKLAND.to_string(), 118782).await;
-        match resp {
-            Ok(text) => {                println!("EXTRACTED::{}", text)            }          
-            Err(_) => {                println!("FAILED!")            }
+
+const str__: &str  = r#"
+<div class="bx-im-message-base__body"><div class="bx-im-message-default__container"><div class="bx-im-message-author-title__container --clickable"><div class="bx-im-chat-title__scope bx-im-chat-title__container"><span class="bx-im-chat-title__content"><!----><span class="bx-im-chat-title__text" title="Сергей Музданбаев" style="color: rgb(88, 204, 71);">Сергей Музданбаев</span><!----><!----><!----></span></div></div><div class="bx-im-message-default-content__container bx-im-message-default-content__scope"><div class="bx-im-message-quote --reply --collapsed --clickable" data-context="chat6986/119486"><div class="bx-im-message-quote__wrap"><div class="bx-im-message-quote__name"><div class="bx-im-message-quote__name-text">Артур Сераждинов</div></div><div class="bx-im-message-quote__text">Прошу согласовать материал <br>1.гофра серая 20-ый диаметр-5000м</div><!----></div></div><div class="bx-im-message-default-content__text">Согласовано</div><!----><div class="bx-im-message-default-content__bottom-panel"><!----><div class="bx-im-message-default-content__status-container"><div class="bx-im-message-status__container"><!----><div class="bx-im-message-status__date">11:25</div><!----></div></div></div></div></div><!----><div class="bx-im-reaction-selector__container"><div class="bx-im-reaction-selector__selector"><div class="bx-im-reaction-selector__icon"></div></div></div></div>
+"#; 
+
+
+#[tokio::test]
+async fn test_websocket_extract_full_info() {
+    let resp = get_full_info_via_id_and_chat(OKLAND.to_string(), 118782).await;
+    match resp {
+        Ok(qi) => {
+            println!("ID: {}", qi.message_id);
+            println!("Автор ответа: {}", qi.message_author);
+            println!("Автор цитаты: {}", qi.quoted_author);
+            println!("Текст цитаты: {}", qi.quoted_text);
+            println!("Текст ответа: {:?}", qi.reply_text);
         }
+        Err(e) => eprintln!("Ошибка: {}", e),
     }
+}
 }

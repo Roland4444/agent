@@ -12,9 +12,92 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use thirtyfour::prelude::*;
 use common::*;
+use tokio::time::{Duration, sleep};
 
 // Состояние приложения
 pub struct AppState {  driver: Arc<WebDriver>,}
+
+
+async fn wait_in_sec(delay: u64) {
+    sleep(Duration::from_secs(delay)).await;
+}
+
+
+pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<()> {
+    let condition = format!("//*[text()='{}']", text);
+    let by_xpath = By::XPath(condition);
+    let element = driver.find(by_xpath).await?;
+    element.click().await?;
+    Ok(())
+}
+pub async fn extract_quote_info_by_chat_and_message_id(
+    driver: &WebDriver,
+    chat_name: &str,
+    message_id: u64,
+) -> Result<QuoteInfo> {
+    // 1. Открываем чат
+    let condition = format!("//*[text()='{}']", chat_name);
+    let by_xpath = By::XPath(condition);
+    let element = driver.find(by_xpath).await
+        .with_context(|| format!("Чат '{}' не найден", chat_name))?;
+    element.click().await?;
+    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+
+    // 2. Находим сообщение по data-id
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let msg_element = driver.find(msg_selector).await
+        .with_context(|| format!("Сообщение с id={} не найдено", message_id))?;
+
+    // 3. Автор ответа
+    let author_selector = By::Css(".bx-im-chat-title__text");
+    let message_author = msg_element.find(author_selector).await
+        .context("Не найден автор ответа")?
+        .text()
+        .await?;
+
+    // 4. Текст ответа (может отсутствовать)
+    let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {
+        el.text().await.ok()
+    } else {
+        None
+    };
+
+    // 5. Автор цитаты
+    let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await
+        .context("Не найден автор цитаты")?
+        .text()
+        .await?;
+
+    // 6. Текст цитаты
+    let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await
+        .context("Текст цитаты не найден")?
+        .text()
+        .await?;
+
+    Ok(QuoteInfo {
+        message_author,
+        reply_text,
+        quoted_author,
+        quoted_text,
+        message_id: message_id.to_string(),
+    })
+}
+pub async fn extract_quote_info_by_chat_and_message_id2(    driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<QuoteInfo> {
+    click_collab_simple_text(driver, chat_name).await?;
+    wait_in_sec(3).await;
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let msg_element = driver.find(msg_selector).await.with_context(|| {     format!("Сообщение с data-id={} не найдено в чате {}", message_id, chat_name)})?;
+
+    let author_selector = By::Css(".bx-im-message-author-title__container .bx-im-chat-title__text");
+    let message_author = "NONAME";///..msg_element.find(author_selector).await.context("Не найден автор сообщения")?.text().await?;
+
+    let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {        el.text().await.ok()    } 
+    else {        None    };    // Автор цитируемого сообщения
+    let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await.context("Не найден автор цитаты")?.text().await?;
+    let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await.context("Не найден текст цитаты")?.text().await?;
+
+    Ok(QuoteInfo {        message_id: message_id.to_string(),        message_author.to_string(),        quoted_author,        quoted_text,        reply_text,    })
+}
 
 
 async fn extract_quoted_text(   driver: &WebDriver,   chat_name: &str,    message_id: u64,) -> Result<String> {
@@ -36,6 +119,7 @@ async fn extract_quoted_text(   driver: &WebDriver,   chat_name: &str,    messag
 
 async fn proc_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {ws.on_upgrade(|socket| handle_proc_socket(socket, state))}
 
+
 async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
     while let Some(Ok(msg)) = socket.recv().await {
         match msg {
@@ -43,49 +127,69 @@ async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 let req: ExtractReq = match serde_json::from_slice(&bin) {
                     Ok(r) => r,
                     Err(e) => {
-                        let resp = ExtractResp {success: false, quoted_text: None, error: Some(format!("Invalid JSON: {}", e)),};
-                        let _ = socket.send(Message::Text(serde_json::to_string(&resp).unwrap().into())).await;
+                        let resp = ExtractResp {
+                            success: false,
+                            quoted_text: None,
+                            error: Some(format!("Invalid JSON: {}", e)),
+                        };
+                        let _ = socket
+                            .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
+                            .await;
                         continue;
                     }
                 };
-                
 
-                match req.type__{
+                match req.type__ {
                     type_operation::ExtractSimple => {
-
                         let result = extract_quoted_text(&state.driver, &req.collab, req.message_id).await;
                         let resp = match result {
-                            Ok(text) => ExtractResp{success: true,  quoted_text: Some(text), error: None},
-                            Err(e)   => ExtractResp{success: false, quoted_text: None,       error: Some(e.to_string())  },
-
+                            Ok(text) => ExtractResp {
+                                success: true,
+                                quoted_text: Some(text),
+                                error: None,
+                            },
+                            Err(e) => ExtractResp {
+                                success: false,
+                                quoted_text: None,
+                                error: Some(e.to_string()),
+                            },
                         };
-
-                        let _ = socket.send(Message::Text(serde_json::to_string(&resp).unwrap().into())).await;
-                    }            
-                    
-                    type_operation::ExtractFull => {
-                        
+                        let _ = socket
+                            .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
+                            .await;
                     }
-
-
-                }    
-
-
-                let resp = match result {
-                    Ok(text) => ExtractResp {
-                        success: true,
-                        quoted_text: Some(text),
-                        error: None,
-                    },
-                    Err(e) => ExtractResp {
-                        success: false,
-                        quoted_text: None,
-                        error: Some(e.to_string()),
-                    },
-                };
-                let _ = socket
-                    .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
-                    .await;
+                    type_operation::ExtractFull => {
+                        let result = extract_quote_info_by_chat_and_message_id(
+                            &state.driver,
+                            &req.collab,
+                            req.message_id,
+                        ).await;
+                        match result {
+                            Ok(quote_info) => {
+                                // Сериализуем полную структуру в JSON и кладём в quoted_text
+                                let json_str = serde_json::to_string(&quote_info).unwrap();
+                                let resp = ExtractResp {
+                                    success: true,
+                                    quoted_text: Some(json_str),
+                                    error: None,
+                                };
+                                let _ = socket
+                                    .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
+                                    .await;
+                            }
+                            Err(e) => {
+                                let resp = ExtractResp {
+                                    success: false,
+                                    quoted_text: None,
+                                    error: Some(e.to_string()),
+                                };
+                                let _ = socket
+                                    .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
+                                    .await;
+                            }
+                        }
+                    }
+                }
             }
             Message::Close(_) => break,
             _ => {}
