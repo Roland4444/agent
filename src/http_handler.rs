@@ -11,24 +11,15 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use thirtyfour::prelude::*;
+use common::*;
 
 // Состояние приложения
 pub struct AppState {
     driver: Arc<WebDriver>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ExtractReq {
-    pub collab: String,
-    pub message_id: u64,
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ExtractResp {
-    pub success: bool,
-    pub quoted_text: Option<String>,
-    pub error: Option<String>,
-}
+
 
 async fn extract_quoted_text(
     driver: &WebDriver,

@@ -1,7 +1,6 @@
 use std::fs;
 //          python3 -m http.server 9999
 
-use crate::http_handler::ExtractResp;
 use anyhow::{Context, Result};
 use chrono::Local;
 use serde_json::Value;
@@ -10,6 +9,7 @@ use std::sync::Arc;
 use std::thread;
 use thirtyfour::prelude::*;
 use tokio::time::{Duration, sleep};
+use common::*;
 
 use serde_json::json;
 
@@ -17,22 +17,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 pub mod http_handler;
 //use futures_util::{SinkExt, StreamExt};
-
-const PAYMENTS: &str = "Платежи";
-const OLIVIA: &str = "ОЛИВИЯ МАКСАКОВА";
-const BABEFA: &str = "ЖК Бабефа";
-const OKLAND: &str = "ОКЛАНД РЫБАЦКАЯ";
-const RED: &str = "РЭД Грузинская";
-const TETRIS: &str = "ЖК Тетрис на Керченской";
-const SCANDINAVIA: &str = "Скандинавия - Моздокская";
-const KUIB: &str = "Куйбышева";
-const POLZ: &str = "Ползунова";
-const ZVEZD: &str = "Звездная";
-const SKY: &str = "СКАЙ ИГАРСКАЯ";
-
-const OWN: &str = "OWN";
-
-const PASS_FIELNAME: &str = "pass";
+pub const PASS_FIELNAME: &str = "pass";
 const LOGIN_FILENAME: &str = "login";
 
 fn pass() -> Option<String> {
@@ -278,7 +263,7 @@ async fn main() -> Result<()> {
     let test = [PAYMENTS, OWN];
     let iterate = [
         PAYMENTS,
-        TETRIS,
+        TETRIS, 
         KUIB,
         OLIVIA,
         BABEFA,
@@ -347,8 +332,7 @@ mod tests {
 
     //use crate::add_magyar;
     use super::*;
-    use crate::http_handler::ExtractResp;
-
+    use common::*; 
     #[test]
     fn test_add() {
         assert_eq!(3, add_magyar(1, 2));
