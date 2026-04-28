@@ -12,6 +12,8 @@ use tokio::time::{Duration, sleep};
 use common::*;
 
 use serde_json::json;
+use scraper::{Html, Selector};
+
 
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
@@ -93,7 +95,29 @@ async fn process_item_with_delay(_delay: u64, text_collab: &str, driver: &WebDri
     wait_in_sec(_delay).await;
     Ok(())
 }
+/////////////////////////////////////////////
+/////////////////////////////////////////////
+pub async fn get_message_html_by_chat_and_id(    driver: &WebDriver,    chat_name: &str,    message_id: u64,) -> Result<String> {
+    let condition = format!("//*[text()='{}']", chat_name);
+    let by_xpath = By::XPath(condition);
+    let element = driver.find(by_xpath).await
+        .with_context(|| format!("Чат '{}' не найден", chat_name))?;
+    element.click().await?;
 
+    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let msg_element = driver.find(msg_selector).await
+        .with_context(|| format!("Сообщение с id={} не найдено", message_id))?;
+
+    let outer_html = driver.execute("return arguments[0].outerHTML;", vec![msg_element.to_json()?]).await?;
+    let html_value = outer_html.json(); // &Value
+    let html_str = html_value.as_str().unwrap_or("").to_string();
+
+    Ok(html_str)
+}
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
 async fn scroll_chat_to_bottom(driver: &WebDriver) -> Result<()> {
     println!("=== Начинаем прокрутку чата ===");
 
@@ -201,6 +225,11 @@ pub async fn get_full_info_via_id_and_chat(chat_name: String, message_id: u64) -
     anyhow::bail!("Не получен ответ от сервера");
 }
 
+pub fn extract_author(input: String) -> Option<String> {
+    let fragment = Html::parse_fragment(&input);
+    let selector = Selector::parse(".bx-im-chat-title__text").ok()?;
+    fragment.select(&selector).next().map(|el| el.text().collect::<String>())
+}
 
 pub async fn get_text_via_chat_id_and_id(chat_name: String, message_id: u64) -> Result<String> {
     let (mut ws_stream, _) = connect_async(URL_WS_CONNECT).await.context("Не удалось подключиться к WebSocket")?;
@@ -230,9 +259,16 @@ async fn main() -> Result<()> {
     driver.goto(&profile_url).await?;
 
     login_cad( &driver,login().expect("SHIT HAPPENS").as_str(),  pass().expect("SHIT HAPPENS").as_str(),  ).await?;
-    wait().await;
+    wait_in_sec(5).await;
     click_collab_simple(&driver).await?;
-    wait_in_sec(15).await;
+    wait_in_sec(1).await;
+   // let resp = get_full_info_via_id_and_chat(OKLAND.to_string(), 118782).await;
+
+
+    let HTML = get_message_html_by_chat_and_id(&driver, OKLAND, 120900).await?;
+
+    println!("\n\n\nHTML::{}\n\n\n\n\n", HTML);
+
 
     let driver_clone = driver.clone();
     let server_handle = tokio::spawn(async move {
@@ -293,17 +329,24 @@ const str__: &str  = r#"
 
 
 #[tokio::test]
-async fn test_websocket_extract_full_info() {
+async fn test_websocket_extract_full_info() {            //                         cargo test test_websocket_extract_full_info -- --nocapture
     let resp = get_full_info_via_id_and_chat(OKLAND.to_string(), 118782).await;
     match resp {
         Ok(qi) => {
             println!("ID: {}", qi.message_id);
-            println!("Автор ответа: {}", qi.message_author);
+           // println!("Автор ответа: {}", qi.message_author);
             println!("Автор цитаты: {}", qi.quoted_author);
             println!("Текст цитаты: {}", qi.quoted_text);
             println!("Текст ответа: {:?}", qi.reply_text);
         }
         Err(e) => eprintln!("Ошибка: {}", e),
     }
+}
+
+#[test]           //       cargo test test_extract_author -- --nocapture
+fn test_extract_author(){
+    let str2__ : &str= r#"<div class="bx-im-message-base__wrap bx-im-message-base__scope --opponent" data-id="120900" data-viewed="true" containerheight="706"><div class="bx-im-message-base__container"><div class="bx-im-message-base__content"><div class="bx-im-message-base__body"><div class="bx-im-message-default__container"><div class="bx-im-message-author-title__container --clickable"><div class="bx-im-chat-title__scope bx-im-chat-title__container"><span class="bx-im-chat-title__content"><!----><span class="bx-im-chat-title__text" title="Сергей Музданбаев" style="color: rgb(88, 204, 71);">Сергей Музданбаев</span><!----><!----><!----></span></div></div><div class="bx-im-message-default-content__container bx-im-message-default-content__scope"><div class="bx-im-message-quote --reply --collapsed --clickable" data-context="chat6986/120850"><div class="bx-im-message-quote__wrap"><div class="bx-im-message-quote__name"><div class="bx-im-message-quote__name-text">Николай Шагов</div></div><div class="bx-im-message-quote__text">Заявка Шагов<br>Тройник канал.рыжий 160×110(45град)×160-18шт<br>Бутылка кан. Рыжая 160&gt;110- 6шт</div><!----></div></div><div class="bx-im-message-default-content__text">Согласовано</div><!----><div class="bx-im-message-default-content__bottom-panel"><!----><div class="bx-im-message-default-content__status-container"><div class="bx-im-message-status__container"><!----><div class="bx-im-message-status__date">08:02</div><!----></div></div></div></div></div><!----><div class="bx-im-reaction-selector__container"><div class="bx-im-reaction-selector__selector"><div class="bx-im-reaction-selector__icon"></div></div></div></div><div class="bx-im-message-context-menu__container bx-im-message-context-menu__scope"><button title="Кликните для открытия меню действий или удерживайте CTRL для цитирования сообщения" class="bx-im-message-context-menu__button"></button></div></div><!----></div></div>"#;
+    let etalon_author = "Сергей Музданбаев";
+    assert_eq!(etalon_author, extract_author(str2__.to_string()).unwrap_or("".to_string()));
 }
 }

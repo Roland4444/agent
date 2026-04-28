@@ -13,7 +13,7 @@ use std::sync::Arc;
 use thirtyfour::prelude::*;
 use common::*;
 use tokio::time::{Duration, sleep};
-
+use crate::extract_author;
 // Состояние приложения
 pub struct AppState {  driver: Arc<WebDriver>,}
 
@@ -31,7 +31,56 @@ pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<
     Ok(())
 }
 pub async fn extract_quote_info_by_chat_and_message_id(driver: &WebDriver,chat_name: &str,message_id: u64,) -> Result<QuoteInfo> {
-    // 1. Открываем чат
+
+    let example = r#"
+        <div class="bx-im-message-base__wrap bx-im-message-base__scope --opponent" data-id="120900" data-viewed="true" containerheight="706">
+            <div class="bx-im-message-base__container">
+                <div class="bx-im-message-base__content">
+                    <div class="bx-im-message-base__body">
+                        <div class="bx-im-message-default__container">
+                            <div class="bx-im-message-author-title__container --clickable">
+                                <div class="bx-im-chat-title__scope bx-im-chat-title__container">
+                                    <span class="bx-im-chat-title__content"><!---->
+                                        <span class="bx-im-chat-title__text" title="Сергей Музданбаев" style="color: rgb(88, 204, 71);">
+                                            Сергей Музданбаев
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="bx-im-message-default-content__container bx-im-message-default-content__scope">
+                                <div class="bx-im-message-quote --reply --collapsed --clickable" data-context="chat6986/120850">
+                                    <div class="bx-im-message-quote__wrap">
+                                        <div class="bx-im-message-quote__name">
+                                            <div class="bx-im-message-quote__name-text">Николай Шагов
+                                            </div>
+                                        </div>
+                                        <div class="bx-im-message-quote__text">Заявка Шагов<br>Тройник канал.рыжий 160×110(45град)×160-18шт<br>Бутылка кан. Рыжая 160&gt;110- 6шт
+                                        </div>
+                                    </div>
+                                </div>
+                            <div class="bx-im-message-default-content__text">Согласовано</div>
+
+                            <div class="bx-im-message-default-content__bottom-panel">
+                                <div class="bx-im-message-default-content__status-container">
+                                    <div class="bx-im-message-status__container">
+                                        <div class="bx-im-message-status__date">08:02
+                                        </div><!---->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <div class="bx-im-reaction-selector__container">
+                    <div class="bx-im-reaction-selector__selector">
+                        <div class="bx-im-reaction-selector__icon">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <div class="bx-im-message-context-menu__container bx-im-message-context-menu__scope">
+        <button title="Кликните для открытия меню действий или удерживайте CTRL для цитирования сообщения" class="bx-im-message-context-menu__button">
+        "#;
+
     let condition = format!("//*[text()='{}']", chat_name);
     let by_xpath = By::XPath(condition);
     let element = driver.find(by_xpath).await
@@ -39,35 +88,32 @@ pub async fn extract_quote_info_by_chat_and_message_id(driver: &WebDriver,chat_n
     element.click().await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
-    // 2. Находим сообщение по data-id
+
+
     let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
     let msg_element = driver.find(msg_selector).await
         .with_context(|| format!("Сообщение с id={} не найдено", message_id))?;
-    // Вывод HTML в консоль
-    let html = msg_element.get_attribute("outerHTML").await?;
-    println!("HTML элемента msg_element:\n{}", html.unwrap());
-    // 3. Автор ответа          bx-im-chat-title__text
-    let author_selector = By::Css(".bx-im-chat-title__text");
-    let message_author ="EFES;".to_string();//msg_element.find(author_selector).await.context("Не найден автор ответа")?.text().await?;
 
-    // 4. Текст ответа (может отсутствовать)
+
+    let outer_html = driver.execute("return arguments[0].outerHTML;", vec![msg_element.to_json()?]).await?;
+    let html_value = outer_html.json(); // &Value
+    let html_str = html_value.as_str().unwrap_or("").to_string();
+    println!("MSG::{}", html_str.to_string());
     let reply_text = if let Ok(el) = msg_element.find(By::Css(".bx-im-message-default-content__text")).await {
         el.text().await.ok()} 
     else {        None    };
 
-    // 5. Автор цитаты
     let quoted_author = msg_element.find(By::Css(".bx-im-message-quote__name-text")).await
         .context("Не найден автор цитаты")?
         .text()
         .await?;
 
-    // 6. Текст цитаты
     let quoted_text = msg_element.find(By::Css(".bx-im-message-quote__text")).await
         .context("Текст цитаты не найден")?
         .text()
         .await?;
 
-    Ok(QuoteInfo {        message_author,reply_text,quoted_author,quoted_text,message_id:message_id.to_string(),})
+    Ok(QuoteInfo {reply_text,quoted_author,quoted_text,message_id:message_id.to_string(),})
 }
 // pub async fn extract_quote_info_by_chat_and_message_id2(    driver: &WebDriver,    chat_name: &str,    message_id: &str,) -> Result<QuoteInfo> {
 //     click_collab_simple_text(driver, chat_name).await?;
@@ -85,6 +131,9 @@ pub async fn extract_quote_info_by_chat_and_message_id(driver: &WebDriver,chat_n
 
 //     Ok(QuoteInfo {message_id.to_string(),        message_author.to_string(),        quoted_author,        quoted_text,        reply_text,    })
 // }
+
+
+
 
 
 async fn extract_quoted_text(   driver: &WebDriver,   chat_name: &str,    message_id: u64,) -> Result<String> {
