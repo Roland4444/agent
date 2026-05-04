@@ -1,5 +1,5 @@
 // http_handler.rs
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{
     Router,
     extract::State,
@@ -7,6 +7,8 @@ use axum::{
     response::Response,
     routing::get,
 };
+
+
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -14,6 +16,7 @@ use thirtyfour::prelude::*;
 use common::*;
 use tokio::time::{Duration, sleep};
 use crate::extract_author;
+
 // Состояние приложения
 pub struct AppState {  driver: Arc<WebDriver>,}
 
@@ -30,56 +33,105 @@ pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<
     element.click().await?;
     Ok(())
 }
-pub async fn extract_quote_info_by_chat_and_message_id(driver: &WebDriver,chat_name: &str,message_id: u64,) -> Result<QuoteInfo> {
 
-    let example = r#"
-        <div class="bx-im-message-base__wrap bx-im-message-base__scope --opponent" data-id="120900" data-viewed="true" containerheight="706">
-            <div class="bx-im-message-base__container">
-                <div class="bx-im-message-base__content">
-                    <div class="bx-im-message-base__body">
-                        <div class="bx-im-message-default__container">
-                            <div class="bx-im-message-author-title__container --clickable">
-                                <div class="bx-im-chat-title__scope bx-im-chat-title__container">
-                                    <span class="bx-im-chat-title__content"><!---->
-                                        <span class="bx-im-chat-title__text" title="Сергей Музданбаев" style="color: rgb(88, 204, 71);">
-                                            Сергей Музданбаев
-                                        </span>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="bx-im-message-default-content__container bx-im-message-default-content__scope">
-                                <div class="bx-im-message-quote --reply --collapsed --clickable" data-context="chat6986/120850">
-                                    <div class="bx-im-message-quote__wrap">
-                                        <div class="bx-im-message-quote__name">
-                                            <div class="bx-im-message-quote__name-text">Николай Шагов
-                                            </div>
-                                        </div>
-                                        <div class="bx-im-message-quote__text">Заявка Шагов<br>Тройник канал.рыжий 160×110(45град)×160-18шт<br>Бутылка кан. Рыжая 160&gt;110- 6шт
-                                        </div>
-                                    </div>
-                                </div>
-                            <div class="bx-im-message-default-content__text">Согласовано</div>
+// Удалите или закомментируйте строку:
+// use crate::extract_author;
+pub async fn extract_quote_info_by_chat_and_message_id(
+    driver: &WebDriver,
+    chat_name: &str,
+    message_id: u64,
+) -> Result<QuoteInfo> {
+    // 1. Открываем чат
+    let condition = format!("//*[text()='{}']", chat_name);
+    let element = driver
+        .find(By::XPath(&condition))
+        .await
+        .with_context(|| format!("Чат '{}' не найден", chat_name))?;
+    element.click().await?;
+    sleep(Duration::from_secs(2)).await;
 
-                            <div class="bx-im-message-default-content__bottom-panel">
-                                <div class="bx-im-message-default-content__status-container">
-                                    <div class="bx-im-message-status__container">
-                                        <div class="bx-im-message-status__date">08:02
-                                        </div><!---->
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                <div class="bx-im-reaction-selector__container">
-                    <div class="bx-im-reaction-selector__selector">
-                        <div class="bx-im-reaction-selector__icon">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        <div class="bx-im-message-context-menu__container bx-im-message-context-menu__scope">
-        <button title="Кликните для открытия меню действий или удерживайте CTRL для цитирования сообщения" class="bx-im-message-context-menu__button">
-        "#;
+    // 2. Захват фокуса: клик по элементу сообщения (автор или контейнер)
+    let focus_selector = ".bx-im-message-list-author-group__container";
+    if let Ok(elem) = driver.find(By::Css(focus_selector)).await {
+        elem.click().await?;
+    } else {
+        // fallback: клик по любому сообщению
+        if let Ok(any_msg) = driver.find(By::Css(".bx-im-message")).await {
+            any_msg.click().await?;
+        } else {
+            driver.execute("document.body.click();", vec![]).await?;
+        }
+    }
+
+    // 3. Эмуляция PageUp для прокрутки истории вверх
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let max_scrolls = 50;
+    let mut found = false;
+
+    for _ in 0..max_scrolls {
+        if driver.find(msg_selector.clone()).await.is_ok() {
+            found = true;
+            break;
+        }
+        // Отправляем PageUp активному элементу (после клика фокус на сообщениях)
+        driver
+            .execute(
+                r#"
+                let active = document.activeElement;
+                if (active) {
+                    let evt = new KeyboardEvent('keydown', { key: 'PageUp', code: 'PageUp', keyCode: 33, which: 33, bubbles: true });
+                    active.dispatchEvent(evt);
+                }
+                "#,
+                vec![],
+            )
+            .await?;
+        sleep(Duration::from_millis(300)).await;
+    }
+
+    if !found {
+        bail!(
+            "Сообщение с id={} не найдено после {} нажатий PageUp",
+            message_id,
+            max_scrolls
+        );
+    }
+
+    // 4. Парсинг (оригинальная логика)
+    let msg_element = driver.find(msg_selector).await?;
+
+    let reply_text = if let Ok(el) = msg_element
+        .find(By::Css(".bx-im-message-default-content__text"))
+        .await
+    {
+        el.text().await.ok()
+    } else {
+        None
+    };
+
+    let quoted_author = msg_element
+        .find(By::Css(".bx-im-message-quote__name-text"))
+        .await
+        .context("Не найден автор цитаты")?
+        .text()
+        .await?;
+
+    let quoted_text = msg_element
+        .find(By::Css(".bx-im-message-quote__text"))
+        .await
+        .context("Текст цитаты не найден")?
+        .text()
+        .await?;
+
+    Ok(QuoteInfo {
+        reply_text,
+        quoted_author,
+        quoted_text,
+        message_id: message_id.to_string(),
+    })
+}
+
+pub async fn extract_quote_info_by_chat_and_message_id__(driver: &WebDriver,chat_name: &str,message_id: u64,) -> Result<QuoteInfo> {
 
     let condition = format!("//*[text()='{}']", chat_name);
     let by_xpath = By::XPath(condition);
@@ -177,6 +229,7 @@ async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
                 match req.type__ {
                     type_operation::ExtractSimple => {
+                        println!("\n\n\nEXTRACT SIMPLE!\n\n\n\n");
                         let result = extract_quoted_text(&state.driver, &req.collab, req.message_id).await;
                         let resp = match result {
                             Ok(text) => ExtractResp {
@@ -195,6 +248,8 @@ async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
                             .await;
                     }
                     type_operation::ExtractFull => {
+                        println!("\n\n\nEXTRACT FULL!\n\n\n\n");
+
                         let result = extract_quote_info_by_chat_and_message_id(
                             &state.driver,
                             &req.collab,
@@ -265,3 +320,54 @@ pub async fn spawn(driver: Arc<WebDriver>) -> Result<()> {
     axum::serve(listener, app).await?;
     Ok(())
 }
+
+
+
+    // let example = r#"
+    //     <div class="bx-im-message-base__wrap bx-im-message-base__scope --opponent" data-id="120900" data-viewed="true" containerheight="706">
+    //         <div class="bx-im-message-base__container">
+    //             <div class="bx-im-message-base__content">
+    //                 <div class="bx-im-message-base__body">
+    //                     <div class="bx-im-message-default__container">
+    //                         <div class="bx-im-message-author-title__container --clickable">
+    //                             <div class="bx-im-chat-title__scope bx-im-chat-title__container">
+    //                                 <span class="bx-im-chat-title__content"><!---->
+    //                                     <span class="bx-im-chat-title__text" title="Сергей Музданбаев" style="color: rgb(88, 204, 71);">
+    //                                         Сергей Музданбаев
+    //                                     </span>
+    //                                 </span>
+    //                             </div>
+    //                         </div>
+    //                         <div class="bx-im-message-default-content__container bx-im-message-default-content__scope">
+    //                             <div class="bx-im-message-quote --reply --collapsed --clickable" data-context="chat6986/120850">
+    //                                 <div class="bx-im-message-quote__wrap">
+    //                                     <div class="bx-im-message-quote__name">
+    //                                         <div class="bx-im-message-quote__name-text">Николай Шагов
+    //                                         </div>
+    //                                     </div>
+    //                                     <div class="bx-im-message-quote__text">Заявка Шагов<br>Тройник канал.рыжий 160×110(45град)×160-18шт<br>Бутылка кан. Рыжая 160&gt;110- 6шт
+    //                                     </div>
+    //                                 </div>
+    //                             </div>
+    //                         <div class="bx-im-message-default-content__text">Согласовано</div>
+
+    //                         <div class="bx-im-message-default-content__bottom-panel">
+    //                             <div class="bx-im-message-default-content__status-container">
+    //                                 <div class="bx-im-message-status__container">
+    //                                     <div class="bx-im-message-status__date">08:02
+    //                                     </div><!---->
+    //                                 </div>
+    //                             </div>
+    //                         </div>
+    //                     </div>
+    //                 </div>
+    //             <div class="bx-im-reaction-selector__container">
+    //                 <div class="bx-im-reaction-selector__selector">
+    //                     <div class="bx-im-reaction-selector__icon">
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //         </div>
+    //     <div class="bx-im-message-context-menu__container bx-im-message-context-menu__scope">
+    //     <button title="Кликните для открытия меню действий или удерживайте CTRL для цитирования сообщения" class="bx-im-message-context-menu__button">
+    //     "#;

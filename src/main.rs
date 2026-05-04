@@ -233,7 +233,7 @@ pub fn extract_author(input: String) -> Option<String> {
 
 pub async fn get_text_via_chat_id_and_id(chat_name: String, message_id: u64) -> Result<String> {
     let (mut ws_stream, _) = connect_async(URL_WS_CONNECT).await.context("Не удалось подключиться к WebSocket")?;
-    let request = json!({        "collab": chat_name,        "message_id": message_id, "type__":  "ExtractSimple" });
+    let request = json!({        "collab": chat_name,        "message_id": message_id, "type__":  "ExtractFull" });
     let request_bytes = serde_json::to_vec(&request)?;
     ws_stream.send(Message::Binary(request_bytes.into())).await?;
 
@@ -265,9 +265,9 @@ async fn main() -> Result<()> {
    // let resp = get_full_info_via_id_and_chat(OKLAND.to_string(), 118782).await;
 
 
-    let HTML = get_message_html_by_chat_and_id(&driver, OKLAND, 120900).await?;
+  //  let HTML = get_message_html_by_chat_and_id(&driver, OKLAND, 120900).await?;
 
-    println!("\n\n\nHTML::{}\n\n\n\n\n", HTML);
+  //  println!("\n\n\nHTML::{}\n\n\n\n\n", HTML);
 
 
     let driver_clone = driver.clone();
@@ -315,10 +315,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_websocket_extract_quote() {
-        let resp = get_text_via_chat_id_and_id(OKLAND.to_string(), 118782).await;
+        let id_old = 118782;
+        let id__ = 123820;
+        let resp: std::result::Result<String, anyhow::Error> = get_text_via_chat_id_and_id(OKLAND.to_string(), id_old).await;
         match resp {
-            Ok(text) => {                println!("EXTRACTED::{}", text)            }
-            Err(_) => {                println!("FAILED!")            }
+            Ok(text) => {             println!("EXTRACTED::>>>{}", text)            }
+            Err(e) => {                println!("FAILED!, error::{}", e)            }
+        }
+        let resp2: std::result::Result<String, anyhow::Error> = get_text_via_chat_id_and_id(OKLAND.to_string(), id__).await;
+        match resp2 {
+            Ok(text) => {                println!("EXTRACTED::>>>{}", text)            }
+            Err(e) => {                println!("FAILED!, error::{}", e)            }
         }
     }
 
