@@ -65,7 +65,7 @@ pub async fn extract_quote_info_by_chat_and_message_id(
 
     // 3. Эмуляция PageUp для прокрутки истории вверх
     let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
-    let max_scrolls = 50;
+    let max_scrolls = 1000;
     let mut found = false;
 
     for _ in 0..max_scrolls {
