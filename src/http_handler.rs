@@ -16,6 +16,7 @@ use thirtyfour::prelude::*;
 use common::*;
 use tokio::time::{Duration, sleep};
 use crate::extract_author;
+use crate::scroll_chat_to_bottom;
 
 // Состояние приложения
 pub struct AppState {  driver: Arc<WebDriver>,}
@@ -36,7 +37,7 @@ pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<
 
 // Удалите или закомментируйте строку:
 // use crate::extract_author;
-pub async fn extract_quote_info_by_chat_and_message_id(
+pub async fn extract_quote_info_by_chat_and_message_id22(
     driver: &WebDriver,
     chat_name: &str,
     message_id: u64,
@@ -49,7 +50,8 @@ pub async fn extract_quote_info_by_chat_and_message_id(
         .with_context(|| format!("Чат '{}' не найден", chat_name))?;
     element.click().await?;
     sleep(Duration::from_secs(2)).await;
-
+    println!("\n\nSCROLL CHAT {} TO DOWN\n\n", chat_name);
+    let _ = scroll_chat_to_bottom(driver).await;
     // 2. Захват фокуса: клик по элементу сообщения (автор или контейнер)
     let focus_selector = ".bx-im-message-list-author-group__container";
     if let Ok(elem) = driver.find(By::Css(focus_selector)).await {
@@ -68,11 +70,12 @@ pub async fn extract_quote_info_by_chat_and_message_id(
     let max_scrolls = 1000;
     let mut found = false;
 
-    for _ in 0..max_scrolls {
+    for x in 0..max_scrolls {
         if driver.find(msg_selector.clone()).await.is_ok() {
             found = true;
             break;
         }
+        println!("COUNTER::{}\n\n", x);
         // Отправляем PageUp активному элементу (после клика фокус на сообщениях)
         driver
             .execute(
@@ -131,6 +134,98 @@ pub async fn extract_quote_info_by_chat_and_message_id(
     })
 }
 
+
+pub async fn extract_quote_info_by_chat_and_message_id(
+    driver: &WebDriver,
+    chat_name: &str,
+    message_id: u64,
+) -> Result<QuoteInfo> {
+    // Открываем чат
+    let condition = format!("//*[text()='{}']", chat_name);
+    let element = driver
+        .find(By::XPath(&condition))
+        .await
+        .with_context(|| format!("Чат '{}' не найден", chat_name))?;
+    element.click().await?;
+    sleep(Duration::from_secs(2)).await;
+
+    // Прокручиваем вниз до конца (подгружаем последние сообщения)
+    scroll_chat_to_bottom(driver).await?;
+
+    // Находим контейнер прокрутки – используем match, чтобы избежать async в замыкании
+    let container = match driver
+        .find(By::Css(".bx-im-dialog-chat__scroll-container"))
+        .await
+    {
+        Ok(c) => c,
+        Err(_) => driver
+            .find(By::Css(".bx-im-dialog-chat__block"))
+            .await
+            .context("Не найден контейнер прокрутки чата")?,
+    };
+
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let max_scrolls = 1500;
+    let mut found = false;
+
+    for step in 0..max_scrolls {
+        if driver.find(msg_selector.clone()).await.is_ok() {
+            found = true;
+            println!("Сообщение {} найдено после {} шагов", message_id, step);
+            break;
+        }
+
+        // Прокручиваем контейнер вверх (прямая манипуляция scrollTop)
+        driver
+            .execute("arguments[0].scrollTop -= 400;", vec![container.to_json()?])
+            .await?;
+
+        if step % 100 == 0 {
+            println!("Прокрутка вверх, шаг {}", step);
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+
+    if !found {
+        bail!(
+            "Сообщение с id={} не найдено после {} шагов",
+            message_id,
+            max_scrolls
+        );
+    }
+
+    let msg_element = driver.find(msg_selector).await?;
+
+    let reply_text = if let Ok(el) = msg_element
+        .find(By::Css(".bx-im-message-default-content__text"))
+        .await
+    {
+        el.text().await.ok()
+    } else {
+        None
+    };
+
+    let quoted_author = msg_element
+        .find(By::Css(".bx-im-message-quote__name-text"))
+        .await
+        .context("Не найден автор цитаты")?
+        .text()
+        .await?;
+
+    let quoted_text = msg_element
+        .find(By::Css(".bx-im-message-quote__text"))
+        .await
+        .context("Текст цитаты не найден")?
+        .text()
+        .await?;
+
+    Ok(QuoteInfo {
+        message_id: message_id.to_string(),
+        quoted_author,
+        quoted_text,
+        reply_text,
+    })
+}
 pub async fn extract_quote_info_by_chat_and_message_id__(driver: &WebDriver,chat_name: &str,message_id: u64,) -> Result<QuoteInfo> {
 
     let condition = format!("//*[text()='{}']", chat_name);

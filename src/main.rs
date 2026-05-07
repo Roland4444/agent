@@ -341,7 +341,7 @@ async fn test_websocket_extract_full_info() {            //                     
     match resp {
         Ok(qi) => {
             println!("ID: {}", qi.message_id);
-           // println!("Автор ответа: {}", qi.message_author);
+          //  println!("Автор ответа: {}", qi.message_author);
             println!("Автор цитаты: {}", qi.quoted_author);
             println!("Текст цитаты: {}", qi.quoted_text);
             println!("Текст ответа: {:?}", qi.reply_text);
