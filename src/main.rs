@@ -1,22 +1,13 @@
-use std::fs;
-//          python3 -m http.server 9999
+use std::time::Duration;
 
-use anyhow::{Context, Result};
-use chrono::Local;
-use serde_json::Value;
-use std::path::Path;
-use std::sync::Arc;
-use std::thread;
+// Внешние
+use anyhow::{Result, bail};
 use thirtyfour::prelude::*;
-use tokio::time::{Duration, sleep};
-use common::*;
+use tokio::time::sleep;
 
-use serde_json::json;
-use scraper::{Html, Selector};
+// Ваши внутренние модули
+use common::*; // login, pass, init_chrome_driver, wait_in_sec, etc.
 
-
-use futures_util::{SinkExt, StreamExt};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 pub mod http_handler;
 //use futures_util::{SinkExt, StreamExt};
 pub const PASS_FIELNAME: &str = "pass";
@@ -45,11 +36,33 @@ async fn take_screenshot(driver: &WebDriver, base_name: &str) -> Result<String> 
     Ok(filename)
 }
 
+// pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
+//     let by_xpath = By::XPath("//*[text()='Коллабы']");    
+//     let element = driver.find(by_xpath).await?;
+//     element.click().await?;
+//     Ok(())
+// }
+
+
+
+// ... остальные импорты
+
 pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
-    let by_xpath = By::XPath("//*[text()='Коллабы']");
-    let element = driver.find(by_xpath).await?;
-    element.click().await?;
-    Ok(())
+    let by_xpath = By::XPath("//span[@class='main-buttons-item-text-box' and text()='Проекты']");
+
+    // Пытаемся найти и кликнуть до 10 раз с паузой 500 мс
+    for _ in 0..10 {
+        if let Ok(element) = driver.find(by_xpath.clone()).await {
+            if element.is_enabled().await.unwrap_or(false) && element.is_displayed().await.unwrap_or(false) {
+                element.click().await?;
+                return Ok(());
+            }
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    // Если не удалось — возвращаем ошибку
+    Err(WebDriverError::NoSuchElement("Элемент 'Проекты' не найден или не кликабелен".to_string()))
 }
 
 pub fn add_magyar(a: u32, b: u32) -> u32 {
