@@ -46,7 +46,8 @@ async fn take_screenshot(driver: &WebDriver, base_name: &str) -> Result<String> 
 }
 
 pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
-    let by_xpath = By::XPath("//*[text()='Коллабы']");
+    let by_xpath = By::XPath("//*[text()='Мессенджер']");
+    //let by_xpath = By::XPath("//*[text()='Коллабы']");
     let element = driver.find(by_xpath).await?;
     element.click().await?;
     Ok(())
