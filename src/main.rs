@@ -87,6 +87,7 @@ async fn wait_in_sec(delay: u64) {
 
 async fn init_chrome_driver() -> Result<Arc<WebDriver>> {
     let mut caps = DesiredCapabilities::chrome();
+ //   caps.add_arg("--headless=new")?;
     caps.add_arg("--no-sandbox")?;
 
     // caps.add_arg("--headless=new")?;  // вместо --headless
@@ -265,9 +266,9 @@ async fn main() -> Result<()> {
 
     const BASE_URL: &str = "https://relits.bitrix24.ru";
     let user_id = 1;
-    let driver = init_chrome_driver().await?;
+    let driver =   init_chrome_driver().await?;
 
-    let profile_url = format!("{}/company/personal/user/{}", BASE_URL, user_id);
+    let profile_url = format!("{}/company/personal/user/{}", BASE_URL, user_id); 
     println!("LINK::{}", profile_url);
     driver.goto(&profile_url).await?;
 
@@ -361,6 +362,25 @@ async fn test_websocket_extract_full_info() {            //                     
         }
         Err(e) => eprintln!("Ошибка: {}", e),
     }
+
+
+    #[tokio::test]
+    async fn test_grep_copckies() -> Result<()> {
+        let mut caps = DesiredCapabilities::chrome();
+        let driver = WebDriver::new("http://localhost:21000", caps).await?;
+        driver.goto("https://relits.bitrix24.ru").await?;
+        wait_in_sec(24).await;
+        wait_in_sec(15).await;
+        let cookies = driver.get_all_cookies().await?;
+        let json = serde_json::to_string(&cookies)?;
+        fs::write("cookies.json", json)?;
+        driver.quit().await?;
+        Ok(())
+
+    }
+
+
+
 }
 
 #[test]           //       cargo test test_extract_author -- --nocapture
