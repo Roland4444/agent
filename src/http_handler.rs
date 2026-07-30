@@ -138,7 +138,7 @@ pub async fn extract_quote_info_by_chat_and_message_id22(
 }
 
 
-pub async fn extract_quote_info_by_chat_and_message_id(
+pub async fn extract_quote_info_by_chat_and_message_id_____(
     driver: &WebDriver,
     chat_name: &str,
     message_id: u64,
@@ -229,6 +229,119 @@ pub async fn extract_quote_info_by_chat_and_message_id(
         reply_text,
     })
 }
+pub async fn click_collab_simple(driver: &WebDriver) -> Result<()> {
+    // Используйте актуальное название вкладки (может быть "Мессенджер", "Коллабы" или "AI Проекты")
+    let element = driver.find(By::XPath("//*[text()='Мессенджер']")).await?;
+    element.scroll_into_view().await?;
+    driver.execute("arguments[0].click();", vec![element.to_json()?]).await?;
+    Ok(())
+}
+
+pub async fn extract_quote_info_by_chat_and_message_id(
+    driver: &WebDriver,
+    chat_name: &str,
+    message_id: u64,
+) -> Result<QuoteInfo> {
+    // 1. Возвращаемся в список чатов (клик по "Мессенджер" или "Коллабы")
+    //    Это гарантирует, что элемент чата будет виден и доступен для повторного клика.
+    click_collab_simple(driver).await?;
+    sleep(Duration::from_secs(1)).await;
+
+    // 2. Находим нужный чат по тексту
+    let condition = format!("//*[text()='{}']", chat_name);
+    let element = driver
+        .find(By::XPath(&condition))
+        .await
+        .with_context(|| format!("Чат '{}' не найден", chat_name))?;
+
+    // Прокручиваем к элементу и кликаем через JavaScript (обход перекрытия)
+    element.scroll_into_view().await?;
+    driver.execute("arguments[0].click();", vec![element.to_json()?]).await?;
+    sleep(Duration::from_secs(2)).await;
+
+    // 3. Прокручиваем чат вниз до конца (подгружаем последние сообщения)
+    scroll_chat_to_bottom(driver).await?;
+
+    // 4. Находим контейнер прокрутки для последующей навигации вверх
+    let container = match driver
+        .find(By::Css(".bx-im-dialog-chat__scroll-container"))
+        .await
+    {
+        Ok(c) => c,
+        Err(_) => driver
+            .find(By::Css(".bx-im-dialog-chat__block"))
+            .await
+            .context("Не найден контейнер прокрутки чата")?,
+    };
+
+    // 5. Поиск сообщения с заданным data-id с прокруткой вверх
+    let msg_selector = By::XPath(&format!("//div[@data-id='{}']", message_id));
+    let max_scrolls = 1500;
+    let mut found = false;
+
+    for step in 0..max_scrolls {
+        if driver.find(msg_selector.clone()).await.is_ok() {
+            found = true;
+            println!("Сообщение {} найдено после {} шагов", message_id, step);
+            break;
+        }
+
+        // Прокручиваем контейнер вверх на 400px
+        driver
+            .execute("arguments[0].scrollTop -= 400;", vec![container.to_json()?])
+            .await?;
+
+        if step % 100 == 0 {
+            println!("Прокрутка вверх, шаг {}", step);
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+
+    if !found {
+        bail!(
+            "Сообщение с id={} не найдено после {} шагов",
+            message_id,
+            max_scrolls
+        );
+    }
+
+    // 6. Извлечение данных из найденного сообщения
+    let msg_element = driver.find(msg_selector).await?;
+
+    let reply_text = if let Ok(el) = msg_element
+        .find(By::Css(".bx-im-message-default-content__text"))
+        .await
+    {
+        el.text().await.ok()
+    } else {
+        None
+    };
+
+    let quoted_author = msg_element
+        .find(By::Css(".bx-im-message-quote__name-text"))
+        .await
+        .context("Не найден автор цитаты")?
+        .text()
+        .await?;
+
+    let quoted_text = msg_element
+        .find(By::Css(".bx-im-message-quote__text"))
+        .await
+        .context("Текст цитаты не найден")?
+        .text()
+        .await?;
+
+    Ok(QuoteInfo {
+        message_id: message_id.to_string(),
+        quoted_author,
+        quoted_text,
+        reply_text,
+    })
+}
+
+
+
+
 pub async fn extract_quote_info_by_chat_and_message_id__(driver: &WebDriver,chat_name: &str,message_id: u64,) -> Result<QuoteInfo> {
 
     let condition = format!("//*[text()='{}']", chat_name);
