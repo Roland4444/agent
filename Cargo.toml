@@ -9,4 +9,10 @@ chrono = "0.4.44"
 serde_json = "1.0.149"
 thirtyfour = {version = "0.36.1" }
 tokio = { version = "1.49.0", features = ["full"] } 
-
+axum = { version = "0.8.8", features = ["ws"] }  
+futures-util = "0.3.32"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio-tungstenite = "0.29.0"
+bytes = "1.9"
+common = {path = "../common"}
+scraper = "0.26.0"
