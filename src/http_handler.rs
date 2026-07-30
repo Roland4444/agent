@@ -55,7 +55,10 @@ pub async fn extract_quote_info_by_chat_and_message_id22(
     // 2. Захват фокуса: клик по элементу сообщения (автор или контейнер)
     let focus_selector = ".bx-im-message-list-author-group__container";
     if let Ok(elem) = driver.find(By::Css(focus_selector)).await {
-        elem.click().await?;
+
+        element.scroll_into_view().await?;
+        driver.execute("arguments[0].click();", vec![element.to_json()?]).await?;
+        //elem.click().await?;
     } else {
         // fallback: клик по любому сообщению
         if let Ok(any_msg) = driver.find(By::Css(".bx-im-message")).await {
@@ -323,7 +326,7 @@ async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 };
 
                 match req.type__ {
-                    type_operation::ExtractSimple => {
+                    TypeOperation::ExtractSimple => {
                         println!("\n\n\nEXTRACT SIMPLE!\n\n\n\n");
                         let result = extract_quoted_text(&state.driver, &req.collab, req.message_id).await;
                         let resp = match result {
@@ -342,7 +345,7 @@ async fn handle_proc_socket(mut socket: WebSocket, state: Arc<AppState>) {
                             .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
                             .await;
                     }
-                    type_operation::ExtractFull => {
+                    TypeOperation::ExtractFull => {
                         println!("\n\n\nEXTRACT FULL!\n\n\n\n");
 
                         let result = extract_quote_info_by_chat_and_message_id(

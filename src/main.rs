@@ -57,13 +57,25 @@ pub fn add_magyar(a: u32, b: u32) -> u32 {
     a + b
 }
 
+// pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<()> {
+//     let condition = format!("//*[text()='{}']", text);
+//     let by_xpath = By::XPath(condition);
+//     let element = driver.find(by_xpath).await?;
+//     element.click().await?;
+//     Ok(())
+// }
+
+
 pub async fn click_collab_simple_text(driver: &WebDriver, text: &str) -> Result<()> {
     let condition = format!("//*[text()='{}']", text);
-    let by_xpath = By::XPath(condition);
-    let element = driver.find(by_xpath).await?;
-    element.click().await?;
+    let element = driver.find(By::XPath(&condition)).await?;
+    // Прокрутка к элементу
+    element.scroll_into_view().await?;
+    // Клик через JavaScript
+    driver.execute("arguments[0].click();", vec![element.to_json()?]).await?;
     Ok(())
 }
+
 
 async fn wait() {
     sleep(Duration::from_secs(30)).await;
